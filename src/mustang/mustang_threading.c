@@ -100,7 +100,7 @@ void verifier_destroy(threadcount_verifier* verifier) {
     verifier = NULL;
 }
 
-thread_args* threadarg_fork(thread_args* existing, char* new_basepath) {
+thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_fd) {
     thread_args* new_args = (thread_args*) calloc(1, sizeof(thread_args));
 
     if ((new_args == NULL) || (errno == ENOMEM)) {
@@ -115,6 +115,7 @@ thread_args* threadarg_fork(thread_args* existing, char* new_basepath) {
     // TODO: (eventually) add in logic to dup/init new marfs_config and marfs_position for new thread
 
     new_args->basepath = strdup(new_basepath);
+    new_args->cwd_fd = new_fd;
 
 #ifdef DEBUG
     new_args->stdout_lock = existing->stdout_lock;
@@ -126,6 +127,7 @@ thread_args* threadarg_fork(thread_args* existing, char* new_basepath) {
 void threadarg_destroy(thread_args* args) {
     free(args->basepath);
     args->basepath = NULL;
+    close(this_args->cwd_fd);
 
     // TODO: (eventually) add in code to set marfs_config and marfs_position struct pointers to NULL
 
@@ -166,8 +168,7 @@ void* thread_routine(void* args) {
     pthread_mutex_unlock(this_args->stdout_lock);
 #endif
 
-    int cd_code = chdir(this_args->basepath);
-    DIR* pwd_handle = opendir(".");
+    DIR* cwd_handle = fdopendir(this_args->cwd_fd);
 
 #ifdef DEBUG
     if (cd_code == -1) {
@@ -186,8 +187,9 @@ void* thread_routine(void* args) {
 
     struct dirent* current_entry = readdir(pwd_handle);
 
-    int subdir_count = 0;
-    char** subdir_paths = (char**) calloc(1, sizeof(char*));
+    // Maintain a local buffer of pthread_ts to limit locking on the pthread_vector and "flush" pthread_ts in bulk
+    pthread_t new_thread_ids[16];
+    int pts_count = 0; // an index to keep track of how many pthread_ts to flush at one time
 
     while (current_entry != NULL) {
         if (current_entry->d_type == DT_DIR) {
@@ -198,14 +200,43 @@ void* thread_routine(void* args) {
                 continue;
             }
 
-            subdir_paths[subdir_count] = strdup(current_entry->d_name);
-            subdir_count += 1;
-            subdir_paths = (char**) realloc(subdir_paths, ((subdir_count + 1) * sizeof(char*)));
-
             if ((subdir_paths == NULL) || (errno == ENOMEM)) {
                 // TODO: log error: ENOMEM
                 return (void*) ENOMEM; // ENOMEM fail-deadly--can't do anything else
             }
+
+            int next_cwd_fd = openat(this_args->cwd_fd, current_entry->d_name, O_RDONLY | O_DIRECTORY);
+
+            thread_args* next_args = threadarg_fork(this_args, strdup(current_entry->d_name), next_cwd_fd);
+
+            int createcode = pthread_create(&new_thread_ids[pts_count], NULL, &thread_routine, (void*) next_args);
+
+            if (createcode != 0) {
+                // TODO: log warning/error: EAGAIN (no system resources available/system-wide limit on threads encountered)
+                // Not strictly fail-deadly for this thread (just new threads will not be spawned)
+                retval = EAGAIN;
+            } else {
+                pts_count += 1;
+            }
+
+            // If 16 threads have been spawned from this thread, "flush" the 
+            // local buffer and add the corresponding pthread_ts to the shared 
+            // vector
+            if (pts_count == 16) {
+                int addcode = pthread_vector_appendset(this_args->pt_vector, new_thread_ids, 16);
+                pts_count = 0; // Unconditionally reset the pts_count to zero. The flush either completely succeeds or completely fails.
+
+                if (addcode != 0) {
+                    retval = addcode;
+                    // TODO: log error
+                }
+            }
+
+#ifdef DEBUG
+            pthread_mutex_lock(this_args->stdout_lock);
+            printf("[thread %0lx]: forked new thread (ID: %0lx) at basepath %s\n", SHORT_ID(), (new_thread_ids[index] & 0xFFFF), subdir_paths[index]);
+            pthread_mutex_unlock(this_args->stdout_lock);
+#endif
 
         } else if (current_entry->d_type == DT_REG) {
 #ifdef DEBUG
@@ -222,40 +253,11 @@ void* thread_routine(void* args) {
         current_entry = readdir(pwd_handle);
     }
 
-    pthread_t new_thread_ids[subdir_count]; 
+    // Flush all remaining pthread_ts of spawned threads to the shared vector
+    int pt_flushcode = pthread_vector_appendset(this_args->pt_vector, new_thread_ids, pts_count);
 
-    for (int index = 0; index < subdir_count; index += 1) {
-        new_thread_ids[index] = 0;
-    }
-
-    for (int index = 0; index < subdir_count; index += 1) {
-
-        thread_args* next_args = threadarg_fork(this_args, subdir_paths[index]);
-
-        int createcode = pthread_create(&new_thread_ids[index], NULL, &thread_routine, (void*) next_args);
-
-#ifdef DEBUG
-        pthread_mutex_lock(this_args->stdout_lock);
-        printf("[thread %0lx]: forked new thread (ID: %0lx) at basepath %s\n", SHORT_ID(), (new_thread_ids[index] & 0xFFFF), subdir_paths[index]);
-        pthread_mutex_unlock(this_args->stdout_lock);
-#endif
-        
-        if (createcode != 0) {
-            // TODO: log warning/error: EAGAIN (no system resources available/system-wide limit on threads encountered)
-            // Not strictly fail-deadly for this thread (just new threads will not be spawned)
-            retval = EAGAIN;
-        }
-    }
-
-    for (int i = 0; i < subdir_count; i += 1) {
-        free(subdir_paths[i]);
-    }
-    free(subdir_paths);
-
-    int addcode = pthread_vector_appendset(this_args->pt_vector, new_thread_ids, subdir_count);
-
-    if (addcode != 0) {
-        retval = addcode;
+    if (pt_flushcode != 0) {
+        retval = pt_flushcode;
         // TODO: log error
     }
 
