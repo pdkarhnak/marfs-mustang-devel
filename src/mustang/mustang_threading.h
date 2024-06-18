@@ -96,7 +96,9 @@ typedef struct thread_args_struct {
     // needed until room is available, This will be the path that the new
     // thread chdir()-s into.
     char* basepath; 
-    int parent_dirfd;
+
+    // Parent-created file descriptor to properly isolate child's new cwd
+    int cwd_fd;
 
 #ifdef DEBUG
     pthread_mutex_t* stdout_lock;
@@ -104,18 +106,57 @@ typedef struct thread_args_struct {
 
 } thread_args;
 
+/**
+ * Allocate a threadcount_verifier struct (see above) which threads will check
+ * to verify that their work does not overwhelm the specified maximum number of
+ * active threads at a time.
+ *
+ * This should be called once in the thread which runs main() for an entire
+ * `mustang` process.
+ */
 threadcount_verifier* verifier_init(size_t threads_max);
 
+/**
+ * Destroy a threadcount_verifier struct and its contents. This should be 
+ * called once in the thread which runs main() for an entire `mustang` process,
+ * and all "child" threads performing traversal must first be verified to have 
+ * exited via pthread_join() calls in the parent (or `mustang` API calls like 
+ * pthread_vector_pollthread()).
+ */
 void verifier_destroy(threadcount_verifier* verifier);
 
-// thread_args* threadarg_init(threadcount_verifier* tc_verifier_new, pthread_vector* pt_vector_new, hashtable* hashtable_new, pthread_mutex_t* hashtable_lock, 
+/**
+ * "fork" a thread's arguments in preparation for the creation of a new thread
+ * which will traverse a layer below the caller thread in the directory 
+ * hierarchy. Technically a misnomer since fork(2) is never called; this
+ * function merely duplicates most of the current's threads arguments to set
+ * up shared state with a new thread.
+ */
+thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_fd);
 
-thread_args* threadarg_fork(thread_args* existing, char* new_basepath);
-
+/**
+ * Destroy a thread's arguments at the conclusion of a thread's run. This must
+ * be called after threadarg_fork() is called for all applicable new threads 
+ * which will traverse encountered subdirectories.
+ */
 void threadarg_destroy(thread_args* args);
 
+/**
+ * A wrapper for threads to synchronize based on the state of a threadcount
+ * verifier (namely, the verifier's mutex and cv) and ensure that the number
+ * of active threads (or, specifically, the number of threads performing 
+ * "actual" traversal work) does not overwhelm the application argument for
+ * the maximum number of active threads.
+ */
 void verify_active_threads(threadcount_verifier* verifier);
 
+/**
+ * A wrapper for threads to synchronize on a verifier; decrement the number
+ * of active threads to indicate one fewer thread is performing "actual" 
+ * traversal work; and broadcast on the verifier's condition variable to allow
+ * waiting threads to wake up, return from verify_active_threads(), and begin
+ * "actual" traversal work.
+ */
 void signal_active_threads(threadcount_verifier* verifier);
 
 #endif
