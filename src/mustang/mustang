@@ -24,7 +24,6 @@ if __name__ == '__main__':
         print("Executable for MUSTANG engine does not exist! Please build it and try again.")
         exit(1)
 
-
     engine_args = ["./mustang_engine"]
 
     init_output_handle = f"{args.output}_in-progress"
@@ -39,7 +38,7 @@ if __name__ == '__main__':
     try:
         subprocess.run(engine_args)
     except subprocess.CalledProcessError:
-        print("WARNING: mustang-engine process returned a non-zero exit code. Check logs for more details.")
+        print("WARNING: mustang_engine process returned a non-zero exit code. Check logs for more details.")
     except:
         print("Some other error occurred. Please try again.")
 

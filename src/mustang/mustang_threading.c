@@ -67,8 +67,8 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #ifdef DEBUG
 #include <stdio.h>
 #include <assert.h>
-
-#define SHORT_ID() (pthread_self() & 0xFFFF)
+#define ID_MASK 0xFFFFFFFF
+#define SHORT_ID() (pthread_self() & ID_MASK)
 #endif
 
 threadcount_verifier* verifier_init(size_t threads_max) {
@@ -262,6 +262,35 @@ void* thread_routine(void* args) {
             pthread_mutex_lock(this_args->hashtable_lock);
             put(this_args->hashtable, current_entry->d_name);
             pthread_mutex_unlock(this_args->hashtable_lock);
+        } else {
+
+            char* irregular_type;
+
+            switch(current_entry->d_type) {
+                case DT_BLK:
+                    irregular_type = "block device";
+                    break;
+                case DT_CHR:
+                    irregular_type = "character device";
+                    break;
+                case DT_FIFO:
+                    irregular_type = "FIFO/pipe";
+                    break;
+                case DT_LNK:
+                    irregular_type = "link";
+                    break;
+                case DT_SOCK:
+                    irregular_type = "socket";
+                    break;
+                default:
+                    irregular_type = "unknown";
+            }
+
+#ifdef DEBUG
+            pthread_mutex_lock(this_args->stdout_lock);
+            printf("[thread %0lx]: WARNING: ignoring irregular file \"%s\" (%s)\n", current_entry->d_name, irregular_type);
+            pthread_mutex_unlock(this_args->stdout_lock);
+#endif
         }
 
         current_entry = readdir(cwd_handle);
