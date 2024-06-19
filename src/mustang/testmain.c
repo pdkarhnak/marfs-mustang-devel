@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <errno.h>
 
 #ifdef DEBUG
@@ -59,6 +60,7 @@ int main(int argc, char** argv) {
     top_args->hashtable = output_table;
     top_args->hashtable_lock = ht_lock;
     top_args->basepath = strdup(argv[2]);
+    top_args->cwd_fd = open(argv[2], O_RDONLY | O_DIRECTORY);
 
 #ifdef DEBUG
     top_args->stdout_lock = out_lock;

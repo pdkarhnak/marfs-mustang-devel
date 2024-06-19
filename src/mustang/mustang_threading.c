@@ -58,6 +58,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 
 #include <unistd.h>
 #include <string.h>
+#include <fcntl.h>
 #include <sys/types.h>
 #include <dirent.h>
 #include <errno.h>
@@ -127,7 +128,7 @@ thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_f
 void threadarg_destroy(thread_args* args) {
     free(args->basepath);
     args->basepath = NULL;
-    close(this_args->cwd_fd);
+    close(args->cwd_fd);
 
     // TODO: (eventually) add in code to set marfs_config and marfs_position struct pointers to NULL
 
@@ -160,30 +161,7 @@ void* thread_routine(void* args) {
 
     verify_active_threads(this_args->tc_verifier);
 
-#ifdef DEBUG
-    char wd_buf[128];
-    pthread_mutex_lock(this_args->stdout_lock);
-    printf("[thread %0lx]: very beginning cwd: %s\n", SHORT_ID(), getcwd(wd_buf, 128));
-    printf("[thread %0lx]: got basepath %s\n", SHORT_ID(), this_args->basepath);
-    pthread_mutex_unlock(this_args->stdout_lock);
-#endif
-
     DIR* cwd_handle = fdopendir(this_args->cwd_fd);
-
-#ifdef DEBUG
-    if (cd_code == -1) {
-        pthread_mutex_lock(this_args->stdout_lock);
-        printf("[thread %0lx]: failed to chdir (%s)\n", SHORT_ID(), strerror(errno));
-        pthread_mutex_unlock(this_args->stdout_lock);
-    }
-#endif
-
-#ifdef DEBUG
-    char* cwd = getcwd(wd_buf, 128);
-    pthread_mutex_lock(this_args->stdout_lock);
-    printf("[thread %0lx]: cd'd into: %s\n", SHORT_ID(), cwd);
-    pthread_mutex_unlock(this_args->stdout_lock);
-#endif
 
     struct dirent* current_entry = readdir(cwd_handle);
 
@@ -199,12 +177,7 @@ void* thread_routine(void* args) {
                 current_entry = readdir(cwd_handle);
                 continue;
             }
-
-            if ((subdir_paths == NULL) || (errno == ENOMEM)) {
-                // TODO: log error: ENOMEM
-                return (void*) ENOMEM; // ENOMEM fail-deadly--can't do anything else
-            }
-
+  
             int next_cwd_fd = openat(this_args->cwd_fd, current_entry->d_name, O_RDONLY | O_DIRECTORY);
 
             thread_args* next_args = threadarg_fork(this_args, strndup(current_entry->d_name, strlen(current_entry->d_name)), next_cwd_fd);
@@ -219,6 +192,16 @@ void* thread_routine(void* args) {
                 pts_count += 1;
             }
 
+#ifdef DEBUG
+            if (createcode == 0) {
+                pthread_mutex_lock(this_args->stdout_lock);
+                printf("[thread %0lx]: forked new thread (ID: %0lx) at basepath %s\n", 
+                        SHORT_ID(), (new_thread_ids[pts_count] & 0xFFFF), current_entry->d_name);
+                pthread_mutex_unlock(this_args->stdout_lock);
+            }
+#endif
+
+
             // If 16 threads have been spawned from this thread, "flush" the 
             // local buffer and add the corresponding pthread_ts to the shared 
             // vector
@@ -231,12 +214,6 @@ void* thread_routine(void* args) {
                     // TODO: log error
                 }
             }
-
-#ifdef DEBUG
-            pthread_mutex_lock(this_args->stdout_lock);
-            printf("[thread %0lx]: forked new thread (ID: %0lx) at basepath %s\n", SHORT_ID(), (new_thread_ids[index] & 0xFFFF), subdir_paths[index]);
-            pthread_mutex_unlock(this_args->stdout_lock);
-#endif
 
         } else if (current_entry->d_type == DT_REG) {
 #ifdef DEBUG

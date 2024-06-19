@@ -289,3 +289,5 @@ stamp-h1
 #   .pyre/
 # End of https://www.gitignore.io/api/c,macos,python,autotools
 
+# mustang-specific ignore directives
+src/mustang/testpoint/
