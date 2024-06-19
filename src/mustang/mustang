@@ -19,7 +19,7 @@ parser.add_argument("-o", "--output", required=False, type=str, nargs='?', defau
 if __name__ == '__main__':
     args = parser.parse_args()
 
-    engine_args = ["./mustang-engine"]
+    engine_args = ["./mustang_engine"]
 
     init_output_handle = f"{args.output}_in-progress"
     final_handle = f"{args.output}_finalized"
