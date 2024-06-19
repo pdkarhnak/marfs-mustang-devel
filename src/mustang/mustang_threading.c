@@ -114,7 +114,7 @@ thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_f
 
     // TODO: (eventually) add in logic to dup/init new marfs_config and marfs_position for new thread
 
-    new_args->basepath = strdup(new_basepath);
+    new_args->basepath = strndup(new_basepath, strlen(new_basepath));
     new_args->cwd_fd = new_fd;
 
 #ifdef DEBUG
@@ -185,7 +185,7 @@ void* thread_routine(void* args) {
     pthread_mutex_unlock(this_args->stdout_lock);
 #endif
 
-    struct dirent* current_entry = readdir(pwd_handle);
+    struct dirent* current_entry = readdir(cwd_handle);
 
     // Maintain a local buffer of pthread_ts to limit locking on the pthread_vector and "flush" pthread_ts in bulk
     pthread_t new_thread_ids[16];
@@ -195,8 +195,8 @@ void* thread_routine(void* args) {
         if (current_entry->d_type == DT_DIR) {
 
             // Skip current directory "." and parent directory ".." to avoid infinite loop in directory traversal
-            if ( (strcmp(current_entry->d_name, ".") == 0) || (strcmp(current_entry->d_name, "..") == 0) ) {
-                current_entry = readdir(pwd_handle);
+            if ( (strncmp(current_entry->d_name, ".", strlen(current_entry->d_name)) == 0) || (strncmp(current_entry->d_name, "..", strlen(current_entry->d_name)) == 0) ) {
+                current_entry = readdir(cwd_handle);
                 continue;
             }
 
@@ -207,7 +207,7 @@ void* thread_routine(void* args) {
 
             int next_cwd_fd = openat(this_args->cwd_fd, current_entry->d_name, O_RDONLY | O_DIRECTORY);
 
-            thread_args* next_args = threadarg_fork(this_args, strdup(current_entry->d_name), next_cwd_fd);
+            thread_args* next_args = threadarg_fork(this_args, strndup(current_entry->d_name, strlen(current_entry->d_name)), next_cwd_fd);
 
             int createcode = pthread_create(&new_thread_ids[pts_count], NULL, &thread_routine, (void*) next_args);
 
@@ -250,7 +250,7 @@ void* thread_routine(void* args) {
             pthread_mutex_unlock(this_args->hashtable_lock);
         }
 
-        current_entry = readdir(pwd_handle);
+        current_entry = readdir(cwd_handle);
     }
 
     // Flush all remaining pthread_ts of spawned threads to the shared vector
@@ -263,7 +263,7 @@ void* thread_routine(void* args) {
 
     signal_active_threads(this_args->tc_verifier);
     threadarg_destroy(this_args);
-    closedir(pwd_handle);
+    closedir(cwd_handle);
 
     return ((void*) retval);
 
