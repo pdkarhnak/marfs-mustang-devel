@@ -2,12 +2,16 @@
 
 import argparse
 import subprocess
+import datetime
+
+startup_timestamp = datetime.datetime.now()
+default_filename = f"mustang-output-{startup_timestamp.year}{startup_timestamp.month}{startup_timestamp.day}-{startup_timestamp.hour}-{startup_timestamp.minute}-{startup_timestamp.second}"
 
 parser = argparse.ArgumentParser(prog='./mustang.py', description='Parse command-line arguments as a wrapper for the MUSTANG binary.')
 parser.add_argument("-t", "--threads-max", help='The maximum number of threads this program allows to simultaneously run before stalling the creation of new threads (default: %(default)s).', 
         type=int, default=128, nargs='?', required=False, metavar='THREADS')
 parser.add_argument("-p", "--paths", nargs='+', required=True, metavar='PATH', help='One or more POSIX-like paths to recursively traverse within a MarFS instance and catalog objects along.')
-parser.add_argument("-o", "--output", required=False, type=str, metavar="FILE", help='Output file where names of catalogged objects (as maintained in the program\'s hashtable) will be written.')
+parser.add_argument("-o", "--output", required=False, type=str, default=default_filename, metavar="FILE", help='Output file where names of catalogged objects (as maintained in the program\'s hashtable) will be written.')
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -17,11 +21,8 @@ if __name__ == '__main__':
 
     engine_args = ["./mustang-engine"]
 
-    if (args.output):
-        engine_args.append(args.output)
-
+    engine_args.append(args.output)
     engine_args.append(args.threads_max)
-
     engine_args.extend(args.paths)
 
     print(f"Used invocation: {engine_args}")
