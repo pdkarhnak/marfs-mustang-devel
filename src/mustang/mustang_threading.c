@@ -288,7 +288,7 @@ void* thread_routine(void* args) {
 
 #ifdef DEBUG
             pthread_mutex_lock(this_args->stdout_lock);
-            printf("[thread %0lx]: WARNING: ignoring irregular file \"%s\" (%s)\n", current_entry->d_name, irregular_type);
+            printf("[thread %0lx]: WARNING: ignoring irregular file \"%s\" (%s)\n", SHORT_ID(), current_entry->d_name, irregular_type);
             pthread_mutex_unlock(this_args->stdout_lock);
 #endif
         }
