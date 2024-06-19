@@ -4,32 +4,36 @@ import argparse
 import subprocess
 
 parser = argparse.ArgumentParser(prog='./mustang.py', description='Parse command-line arguments as a wrapper for the MUSTANG binary.')
-parser.add_argument("-t", "--threads-max", help='The maximum number of threads this program allows to simultaneously run before stalling the creation of new threads (default: %(default)s).', type=int, default=128, nargs='?', required=False, metavar='THREADS')
-parser.add_argument("-p", "--paths", nargs='+', required=True, metavar='PATH')
-parser.add_argument("-o, --output", required=False, type=str, nargs='+', metavar="FILE")
+parser.add_argument("-t", "--threads-max", help='The maximum number of threads this program allows to simultaneously run before stalling the creation of new threads (default: %(default)s).', 
+        type=int, default=128, nargs='?', required=False, metavar='THREADS')
+parser.add_argument("-p", "--paths", nargs='+', required=True, metavar='PATH', help='One or more POSIX-like paths to recursively traverse within a MarFS instance and catalog objects along.')
+parser.add_argument("-o", "--output", required=False, type=str, metavar="FILE", help='Output file where names of catalogged objects (as maintained in the program\'s hashtable) will be written.')
 
 if __name__ == '__main__':
     args = parser.parse_args()
 
     # eventual invocation:
-    # ./mustang-bin {args.max_threads} [paths:] /path/one /path/two ... [namespaces:] /ns1 /ns2 ... 
+    # ./mustang-engine {args.max_threads} [paths:] /path/one /path/two ...
 
+    engine_args = ["./mustang-engine"]
 
-    base_invocation = f"./mustang-bin {args.threads_max}"
+    if (args.output):
+        engine_args.append(args.output)
 
-    base_invocation += " [paths:]"
+    engine_args.append(args.threads_max)
 
-    for path in args.paths:
-        base_invocation += f" {path}" 
+    engine_args.extend(args.paths)
 
-    full_invocation = ''
+    print(f"Used invocation: {engine_args}")
 
-    if (args.namespaces):
+    exit(0)
 
-        full_invocation = base_invocation + " [namespaces:]"
+    # TODO: remove exit() call once mustang-engine fully implemented
 
-        for namespace in args.namespaces:
-            full_invocation += f" {namespace}"
-
-    # collect command-line args in a list, then subprocess.run() on that list
+    try:
+        subprocess.run(engine_args)
+    except subprocess.CalledProcessError:
+        print("WARNING: mustang-engine process returned a non-zero exit code. Check logs for more details.")
+    except:
+        print("Some other error occurred. Please try again.")
 
