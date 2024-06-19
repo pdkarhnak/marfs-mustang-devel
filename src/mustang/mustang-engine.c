@@ -23,8 +23,6 @@ extern void* thread_routine(void* args);
 
 int main(int argc, char** argv) {
 
-    int retval = 0;
-
     if (argc < 4) {
         printf("USAGE: ./mustang-engine [output file] [max threads] [paths, ...]\n");
         printf("\tHINT: see mustang wrapper or invoke \"mustang -h\" for more details.\n");
@@ -70,8 +68,17 @@ int main(int argc, char** argv) {
     top_args->pt_vector = pt_vec;
     top_args->hashtable = output_table;
     top_args->hashtable_lock = ht_lock;
-    top_args->basepath = strdup(argv[2]);
-    top_args->cwd_fd = open(argv[2], O_RDONLY | O_DIRECTORY);
+    top_args->basepath = strdup(argv[3]);
+    top_args->cwd_fd = open(argv[3], O_RDONLY | O_DIRECTORY);
+
+#ifdef DEBUG
+    if (top_args->cwd_fd == -1) {
+        pthread_mutex_lock(out_lock);
+        printf("ERROR: open() failed! (%s)\n", strerror(errno));
+        pthread_mutex_unlock(out_lock);
+        return 1;
+    }
+#endif
 
 #ifdef DEBUG
     top_args->stdout_lock = out_lock;

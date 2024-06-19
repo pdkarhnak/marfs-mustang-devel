@@ -3,6 +3,7 @@
 import argparse
 import subprocess
 import datetime
+import shutil
 
 startup_timestamp = datetime.datetime.now()
 default_filename = f"mustang-output-{startup_timestamp.year}{startup_timestamp.month}{startup_timestamp.day}-{startup_timestamp.hour}-{startup_timestamp.minute}-{startup_timestamp.second}"
@@ -20,11 +21,14 @@ if __name__ == '__main__':
 
     engine_args = ["./mustang-engine"]
 
-    engine_args.append(args.output)
+    init_output_handle = f"{args.output}_in-progress"
+    final_handle = f"{args.output}_finalized"
+
+    engine_args.append(init_output_handle)
     engine_args.append(str(args.threads_max))
     engine_args.extend(args.paths)
 
-    print(f"Used invocation: {engine_args}")
+    print(f"Using invocation: {engine_args}")
 
     try:
         subprocess.run(engine_args)
@@ -32,4 +36,6 @@ if __name__ == '__main__':
         print("WARNING: mustang-engine process returned a non-zero exit code. Check logs for more details.")
     except:
         print("Some other error occurred. Please try again.")
+
+    shutil.move(init_output_handle, final_handle) 
 

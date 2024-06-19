@@ -163,6 +163,15 @@ void* thread_routine(void* args) {
 
     DIR* cwd_handle = fdopendir(this_args->cwd_fd);
 
+#ifdef DEBUG
+    if (cwd_handle == NULL) {
+        pthread_mutex_lock(this_args->stdout_lock);
+        printf("ERROR: directory handle is NULL! (%s)\n", strerror(errno));
+        pthread_mutex_unlock(this_args->stdout_lock);
+        pthread_exit((void*) 1);
+    }
+#endif
+
     struct dirent* current_entry = readdir(cwd_handle);
 
     // Maintain a local buffer of pthread_ts to limit locking on the pthread_vector and "flush" pthread_ts in bulk
