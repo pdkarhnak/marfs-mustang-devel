@@ -96,7 +96,7 @@ int main(int argc, char** argv) {
 
     printf("\n===== BEGIN hashtable dump: =====\n\n");
 
-    hashtable_dump(output_table);
+    hashtable_dump(output_table, stdout);
 
     printf("\n===== END hashtable dump    =====\n");
 

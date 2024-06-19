@@ -60,6 +60,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #define __HASHTABLE_H__
 
 #include <stdint.h>
+#include <stdio.h>
 
 /**
  * A customizable constant which will directly control the maximum number of
@@ -113,6 +114,6 @@ char* get(hashtable* table, char* name_key);
  */
 void put(hashtable* table, char* new_object_name);
 
-void hashtable_dump(hashtable* table);
+void hashtable_dump(hashtable* table, FILE* output);
 
 #endif

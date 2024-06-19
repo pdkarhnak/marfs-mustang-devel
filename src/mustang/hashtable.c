@@ -126,10 +126,10 @@ void put(hashtable* table, char* new_object_name) {
     }
 }
 
-void hashtable_dump(hashtable* table) {
+void hashtable_dump(hashtable* table, FILE* output) {
     for (size_t index = 0; index < CAPACITY; index += 1) {
         if ((table->stored_nodes)[index] != NULL) {
-            printf("Index %zu:\t%s\n", index, (table->stored_nodes)[index]);
+            fprintf(output, "Index %zu:\t%s\n", index, (table->stored_nodes)[index]);
         }
     }
 }
