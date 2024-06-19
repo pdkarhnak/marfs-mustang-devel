@@ -59,6 +59,14 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #ifndef __MUSTANG_THREADING_H__
 #define __MUSTANG_THREADING_H__
 
+#ifndef THREADBUF_SIZE
+#define THREADBUF_SIZE 16
+#endif
+
+#ifndef NAMECACHE_SIZE
+#define NAMECACHE_SIZE 8
+#endif
+
 #include "hashtable.h"
 #include "pthread_vector.h"
 #include <stdlib.h>
