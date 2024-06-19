@@ -6,7 +6,9 @@
 
 #ifdef DEBUG
 #include <assert.h>
-#define SHORT_ID() (pthread_self() & 0xFFFF)
+#define ID_MASK 0xFFFFFFFF
+#define SHORT_SELFID() (pthread_self() & ID_MASK)
+#define SHORT_ID(id) (id & ID_MASK)
 #endif
 
 #include "hashtable.h"
@@ -57,43 +59,39 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    thread_args* top_args = (thread_args*) calloc(1, sizeof(thread_args));
+    pthread_t top_pthread_set[argc-3];
 
-    if ((top_args == NULL) || (errno == ENOMEM)) {
-        ERR("No memory left--failed to allocate thread_args struct.", errno);
-        return 1;
-    }
+    for (int index = 3; index < argc; index += 1) {
 
-    top_args->tc_verifier = verifier;
-    top_args->pt_vector = pt_vec;
-    top_args->hashtable = output_table;
-    top_args->hashtable_lock = ht_lock;
-    top_args->basepath = strdup(argv[3]);
-    top_args->cwd_fd = open(argv[3], O_RDONLY | O_DIRECTORY);
+        int next_cwd_fd = open(argv[index], O_RDONLY | O_DIRECTORY);
+        char* next_basepath = strndup(argv[index], strlen(argv[index]));
 
 #ifdef DEBUG
-    if (top_args->cwd_fd == -1) {
+        if (next_cwd_fd == -1) {
+            pthread_mutex_lock(out_lock);
+            printf("ERROR: open() failed! (%s)\n", strerror(errno));
+            pthread_mutex_unlock(out_lock);
+            return 1;
+        }
+#endif
+
+        thread_args* topdir_args = threadarg_init(verifier, pt_vec, output_table, ht_lock, next_basepath, next_cwd_fd);
+
+#ifdef DEBUG
+        topdir_args->stdout_lock = out_lock;        
+#endif
+
+        pthread_create(&top_pthread_set[index - 3], NULL, &thread_routine, (void*) topdir_args);
+
+#ifdef DEBUG
         pthread_mutex_lock(out_lock);
-        printf("ERROR: open() failed! (%s)\n", strerror(errno));
+        printf("[thread %0lx -- parent]: created top thread with ID: %0lx\n", SHORT_SELFID(), SHORT_ID(top_pthread_set[index - 3]));
         pthread_mutex_unlock(out_lock);
-        return 1;
+#endif
+
     }
-#endif
 
-#ifdef DEBUG
-    top_args->stdout_lock = out_lock;
-#endif
-
-    pthread_t top_thread;
-    pthread_create(&top_thread, NULL, &thread_routine, (void*) top_args);
-
-#ifdef DEBUG
-    pthread_mutex_lock(out_lock);
-    printf("[thread %0lx -- parent]: created top thread with ID: %0lx\n", SHORT_ID(), (top_thread & 0xFFFF));
-    pthread_mutex_unlock(out_lock);
-#endif
-
-    pthread_vector_appendset(pt_vec, &top_thread, 1);
+    pthread_vector_appendset(pt_vec, top_pthread_set, 1);
     
     size_t* perthread_retval;
 
@@ -101,7 +99,7 @@ int main(int argc, char** argv) {
         pthread_vector_pollthread(pt_vec, (void**) &perthread_retval, index);
 #ifdef DEBUG
         pthread_mutex_lock(out_lock);
-        printf("[thread %0lx -- parent]: Thread at index %d returned: %zu\n", SHORT_ID(), index, ((size_t) perthread_retval));
+        printf("[thread %0lx -- parent]: Thread at index %d returned: %zu\n", SHORT_SELFID(), index, ((size_t) perthread_retval));
         pthread_mutex_unlock(out_lock);
 #endif
     }

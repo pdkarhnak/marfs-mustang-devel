@@ -101,6 +101,34 @@ void verifier_destroy(threadcount_verifier* verifier) {
     verifier = NULL;
 }
 
+#ifdef DEBUG
+void set_stdout_lock(thread_args* existing, pthread_mutex_t* stdout_lock) {
+    existing->stdout_lock = stdout_lock;
+}
+#endif
+
+thread_args* threadarg_init(threadcount_verifier* new_verifier, pthread_vector* new_vector, 
+        hashtable* new_hashtable, pthread_mutex_t* new_ht_lock, char* new_basepath, int new_fd) {
+    thread_args* new_args = (thread_args*) calloc(1, sizeof(thread_args));
+
+    if ((new_args == NULL) || (errno == ENOMEM)) {
+        return NULL;
+    }
+
+    new_args->tc_verifier = new_verifier;
+    new_args->pt_vector = new_vector;
+    new_args->hashtable = new_hashtable;
+    new_args->hashtable_lock = new_ht_lock;
+    new_args->basepath = new_basepath;
+    new_args->cwd_fd = new_fd;
+
+#ifdef DEBUG
+    new_args->stdout_lock = NULL;
+#endif
+
+    return new_args;
+}
+
 thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_fd) {
     thread_args* new_args = (thread_args*) calloc(1, sizeof(thread_args));
 

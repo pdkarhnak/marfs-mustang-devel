@@ -126,6 +126,17 @@ threadcount_verifier* verifier_init(size_t threads_max);
 void verifier_destroy(threadcount_verifier* verifier);
 
 /**
+ * Initialize a new argument struct in preparation for the creation of a new
+ * thread. This creates a thread_args struct "from scratch" and is intended to
+ * be used in the "top-level" thread (the thread which runs main). Due to the 
+ * considerable amount of shared state between all threads, threadarg_fork() 
+ * is used as documented below for all other thread creation occurring in 
+ * threads besides the top-level thread.
+ */
+thread_args* threadarg_init(threadcount_verifier* new_verifier, pthread_vector* new_vector, 
+        hashtable* new_hashtable, pthread_mutex_t* new_ht_lock, char* new_basepath, int new_fd);
+
+/**
  * "fork" a thread's arguments in preparation for the creation of a new thread
  * which will traverse a layer below the caller thread in the directory 
  * hierarchy. Technically a misnomer since fork(2) is never called; this
