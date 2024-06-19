@@ -291,3 +291,5 @@ stamp-h1
 
 # mustang-specific ignore directives
 src/mustang/testpoint/
+src/mustang/testing-logs/
+src/mustang/*.txt
