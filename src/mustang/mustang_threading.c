@@ -115,7 +115,7 @@ thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_f
 
     // TODO: (eventually) add in logic to dup/init new marfs_config and marfs_position for new thread
 
-    new_args->basepath = strndup(new_basepath, strlen(new_basepath));
+    new_args->basepath = new_basepath;
     new_args->cwd_fd = new_fd;
 
 #ifdef DEBUG
@@ -196,7 +196,7 @@ void* thread_routine(void* args) {
             if (createcode == 0) {
                 pthread_mutex_lock(this_args->stdout_lock);
                 printf("[thread %0lx]: forked new thread (ID: %0lx) at basepath %s\n", 
-                        SHORT_ID(), (new_thread_ids[pts_count] & 0xFFFF), current_entry->d_name);
+                        SHORT_ID(), (new_thread_ids[pts_count - 1] & 0xFFFF), current_entry->d_name);
                 pthread_mutex_unlock(this_args->stdout_lock);
             }
 #endif
