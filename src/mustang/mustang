@@ -4,6 +4,7 @@ import argparse
 import subprocess
 import datetime
 import shutil
+import os
 
 startup_timestamp = datetime.datetime.now()
 default_filename = f"mustang-output-{startup_timestamp.year}{startup_timestamp.month}{startup_timestamp.day}-{startup_timestamp.hour}-{startup_timestamp.minute}-{startup_timestamp.second}"
@@ -18,6 +19,11 @@ parser.add_argument("-o", "--output", required=False, type=str, nargs='?', defau
 
 if __name__ == '__main__':
     args = parser.parse_args()
+
+    if not(os.access("./mustang_engine", os.F_OK)):
+        print("Executable for MUSTANG engine does not exist! Please build it and try again.")
+        exit(1)
+
 
     engine_args = ["./mustang_engine"]
 
