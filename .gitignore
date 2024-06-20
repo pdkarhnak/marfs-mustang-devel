@@ -293,3 +293,4 @@ stamp-h1
 src/mustang/testpoint/
 src/mustang/testing-logs/
 src/mustang/*.txt
+src/mustang/tests
