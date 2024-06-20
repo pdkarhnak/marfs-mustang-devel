@@ -68,7 +68,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #endif
 
 #include "hashtable.h"
-#include "pthread_vector.h"
+#include "namecache.h"
 #include <stdlib.h>
 #include <pthread.h>
 
@@ -87,8 +87,6 @@ typedef struct thread_args_struct {
     // Synchronization components to enforce a maximum number of active threads
     // at one time.
     threadcount_verifier* tc_verifier;
-
-    pthread_vector* pt_vector;
 
     // MarFS context components for this thread: position and config
     /*
@@ -122,7 +120,7 @@ typedef struct thread_args_struct {
  * This should be called once in the thread which runs main() for an entire
  * `mustang` process.
  */
-threadcount_verifier* verifier_init(size_t threads_max);
+threadcount_verifier* verifier_init(size_t threads_max, pthread_mutex_t* new_lock, pthread_cond_t* new_cv);
 
 /**
  * Destroy a threadcount_verifier struct and its contents. This should be 
@@ -141,8 +139,8 @@ void verifier_destroy(threadcount_verifier* verifier);
  * is used as documented below for all other thread creation occurring in 
  * threads besides the top-level thread.
  */
-thread_args* threadarg_init(threadcount_verifier* new_verifier, pthread_vector* new_vector, 
-        hashtable* new_hashtable, pthread_mutex_t* new_ht_lock, char* new_basepath, int new_fd);
+thread_args* threadarg_init(threadcount_verifier* new_verifier, hashtable* new_hashtable, 
+        pthread_mutex_t* new_ht_lock, char* new_basepath, int new_fd);
 
 /**
  * "fork" a thread's arguments in preparation for the creation of a new thread

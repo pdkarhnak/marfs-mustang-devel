@@ -3,6 +3,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <pthread.h>
+#include <marfs.h>
 
 #ifdef DEBUG
 #include <assert.h>
@@ -40,16 +42,23 @@ int main(int argc, char** argv) {
     }
 
     hashtable* output_table = hashtable_init();
-    pthread_mutex_t* ht_lock = (pthread_mutex_t*) calloc(1, sizeof(pthread_mutex_t));
-    pthread_mutex_init(ht_lock, NULL);
+    
+    pthread_mutex_t ht_lock;
+    pthread_mutex_init(&ht_lock, NULL);
+
+    pthread_mutex_t verifier_lock;
+    pthread_mutex_init(&verifier_lock, NULL);
+
+    pthread_cond_t verifier_cv;
+    pthread_cond_init(&verifier_cv, NULL);
 
     const size_t max_threads = ((size_t) atol(argv[2]));
 
-    threadcount_verifier* verifier = verifier_init(max_threads);
+    threadcount_verifier* verifier = verifier_init(max_threads, &verifier_lock, &verifier_cv);
 
 #ifdef DEBUG
-    pthread_mutex_t* out_lock = (pthread_mutex_t*) calloc(1, sizeof(pthread_mutex_t));
-    pthread_mutex_init(out_lock, NULL);
+    pthread_mutex_t out_lock;
+    pthread_mutex_init(&out_lock, NULL);
 #endif
 
     pthread_vector* pt_vec = pthread_vector_init(max_threads);
@@ -68,25 +77,25 @@ int main(int argc, char** argv) {
 
 #ifdef DEBUG
         if (next_cwd_fd == -1) {
-            pthread_mutex_lock(out_lock);
+            pthread_mutex_lock(&out_lock);
             printf("ERROR: open() failed! (%s)\n", strerror(errno));
-            pthread_mutex_unlock(out_lock);
+            pthread_mutex_unlock(&out_lock);
             return 1;
         }
 #endif
 
-        thread_args* topdir_args = threadarg_init(verifier, pt_vec, output_table, ht_lock, next_basepath, next_cwd_fd);
+        thread_args* topdir_args = threadarg_init(verifier, pt_vec, output_table, &ht_lock, next_basepath, next_cwd_fd);
 
 #ifdef DEBUG
-        topdir_args->stdout_lock = out_lock;        
+        topdir_args->stdout_lock = &out_lock;        
 #endif
 
         pthread_create(&top_pthread_set[index - 3], NULL, &thread_routine, (void*) topdir_args);
 
 #ifdef DEBUG
-        pthread_mutex_lock(out_lock);
-        printf("[thread %0lx -- parent]: created top thread with ID: %0lx\n", SHORT_SELFID(), SHORT_ID(top_pthread_set[index - 3]));
-        pthread_mutex_unlock(out_lock);
+        pthread_mutex_lock(&out_lock);
+        printf("[thread %0lx -- parent]: created top thread with ID: %0lx and target basepath: '%s'\n", SHORT_SELFID(), SHORT_ID(top_pthread_set[index - 3]), next_basepath);
+        pthread_mutex_unlock(&out_lock);
 #endif
 
     }
@@ -98,16 +107,14 @@ int main(int argc, char** argv) {
     for (int index = 0; index < (pt_vec->size); index += 1) {
         pthread_vector_pollthread(pt_vec, (void**) &perthread_retval, index);
 #ifdef DEBUG
-        pthread_mutex_lock(out_lock);
+        pthread_mutex_lock(&out_lock);
         printf("[thread %0lx -- parent]: Thread at index %d returned: %zu\n", SHORT_SELFID(), index, ((size_t) perthread_retval));
-        pthread_mutex_unlock(out_lock);
+        pthread_mutex_unlock(&out_lock);
 #endif
     }
 
 #ifdef DEBUG
-    pthread_mutex_destroy(out_lock);
-    free(out_lock);
-    out_lock = NULL;
+    pthread_mutex_destroy(&out_lock);
 #endif
 
     hashtable_dump(output_table, output_ptr);
@@ -116,8 +123,7 @@ int main(int argc, char** argv) {
     verifier_destroy(verifier);
     pthread_vector_destroy(pt_vec);
     hashtable_destroy(output_table);
-    pthread_mutex_destroy(ht_lock);
-    free(ht_lock);
+    pthread_mutex_destroy(&ht_lock);
 
     return 0;
 

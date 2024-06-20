@@ -69,9 +69,10 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <assert.h>
 #define ID_MASK 0xFFFFFFFF
 #define SHORT_ID() (pthread_self() & ID_MASK)
+#define NAMECACHE_ENTRIES 8
 #endif
 
-threadcount_verifier* verifier_init(size_t threads_max) {
+threadcount_verifier* verifier_init(size_t threads_max, pthread_mutex_t* new_lock, pthread_cond_t* new_cv) {
     threadcount_verifier* new_verifier = (threadcount_verifier*) calloc(1, sizeof(threadcount_verifier));
 
     if ((new_verifier == NULL) || (errno == ENOMEM)) {
@@ -81,22 +82,15 @@ threadcount_verifier* verifier_init(size_t threads_max) {
     new_verifier->active_threads = 0;
     new_verifier->max_threads = threads_max;
 
-    pthread_mutex_t* verifier_mutex = (pthread_mutex_t*) calloc(1, sizeof(pthread_mutex_t));
-    pthread_mutex_init(verifier_mutex, NULL);
-    new_verifier->self_lock = verifier_mutex;
-
-    pthread_cond_t* verifier_cv = (pthread_cond_t*) calloc(1, sizeof(pthread_cond_t));
-    pthread_cond_init(verifier_cv, NULL);
-    new_verifier->active_threads_cv = verifier_cv;
+    new_verifier->self_lock = new_lock;
+    new_verifier->active_threads_cv = new_cv;
 
     return new_verifier;
 }
 
 void verifier_destroy(threadcount_verifier* verifier) {
     pthread_mutex_destroy(verifier->self_lock);
-    free(verifier->self_lock);
     pthread_cond_destroy(verifier->active_threads_cv);
-    free(verifier->active_threads_cv);
     free(verifier);
     verifier = NULL;
 }
@@ -178,8 +172,8 @@ void verify_active_threads(threadcount_verifier* verifier) {
 void signal_active_threads(threadcount_verifier* verifier) {
     pthread_mutex_lock(verifier->self_lock); 
     verifier->active_threads -= 1;
-    pthread_mutex_unlock(verifier->self_lock);
     pthread_cond_broadcast(verifier->active_threads_cv);
+    pthread_mutex_unlock(verifier->self_lock);
 }
 
 void* thread_routine(void* args) {
@@ -238,7 +232,6 @@ void* thread_routine(void* args) {
             }
 #endif
 
-
             // If 16 threads have been spawned from this thread, "flush" the 
             // local buffer and add the corresponding pthread_ts to the shared 
             // vector
@@ -262,6 +255,7 @@ void* thread_routine(void* args) {
             pthread_mutex_lock(this_args->hashtable_lock);
             put(this_args->hashtable, current_entry->d_name);
             pthread_mutex_unlock(this_args->hashtable_lock);
+
         } else {
 
             char* irregular_type;
