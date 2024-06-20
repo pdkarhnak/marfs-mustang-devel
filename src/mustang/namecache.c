@@ -31,11 +31,11 @@ namecache_node* node_init(char* name) {
 
 void node_destroy(namecache_node* node) {
     if (node->prev) {
-        node->prev->next = NULL;
+        node->prev->next = node->next;
     }
 
     if (node->next) {
-        node->next->prev = NULL;
+        node->next->prev = node->prev;
     }
 
     free(node->name_data);
@@ -68,6 +68,7 @@ int search_cache(namecache* cache, char* searched_name) {
 }
 
 int node_enqueue(namecache* cache, char* new_name) {
+
     if (cache->nodecount == cache->nodes_max) {
         tail_dequeue(cache);
     }
@@ -81,6 +82,11 @@ int node_enqueue(namecache* cache, char* new_name) {
     cache->head->prev = corresponding_node;
     corresponding_node->next = cache->head;
     cache->head = corresponding_node;
+
+    if (cache->tail == NULL) {
+        cache->tail = corresponding_node;
+    }
+
     cache->nodecount += 1;
 
     return 0;
