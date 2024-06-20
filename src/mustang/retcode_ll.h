@@ -56,8 +56,8 @@ LANL contributions is found at https://github.com/jti-lanl/aws4c.
 GNU licenses can be found at http://www.gnu.org/licenses/.
 */
 
-#ifndef __PTHREAD_VECTOR_H__
-#define __PTHREAD_VECTOR_H__
+#ifndef __RETCODE_LL_H__
+#define __RETCODE_LL_H__
 
 #include <stdint.h>
 #include <pthread.h>
@@ -75,15 +75,6 @@ typedef struct retcode_struct {
     retcode* next;
 } retcode;
 
-/**
- * A dynamic array to store pthread_ts which may be shared and safely 
- * interacted with from an arbitrary number of threads.
- *
- * Meant to be initialized and destroyed in a "parent" (main thread or 
- * similar), but may have its contents checked by retcode_ll_get and its 
- * underlying array contents appended to by retcode_ll_appendset in any 
- * thread.
- */
 typedef struct retcode_ll_struct {
     uint32_t size;
     retcode* list;
@@ -112,6 +103,8 @@ int retcode_ll_add(retcode_ll* list, retcode* node);
  * Concatenate 
  */
 retcode_ll* retcode_ll_concat(retcode_ll* dest, retcode_ll* src);
+
+void retcode_ll_flush(retcode_ll* list, FILE* logfile, pthread_mutex_t* logfile_lock);
 
 /**
  * "Poll" (join and get return value of) a particular thread whose pthread_t ID
