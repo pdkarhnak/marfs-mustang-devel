@@ -65,10 +65,20 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <errno.h>
 #include "mustang_threading.h"
 
+typedef enum {
+    SUCCESS = 0x0,
+    ALLOC_FAILED, /* 0x1 */
+    DIR_OPEN_FAILED, /* 0x2 */
+    NEW_DIRFD_OPEN_FAILED = 0x4
+    THREADARG_FORK_FAILED = 0x8,
+    PTHREAD_CREATE_FAILED = 0x10,
+    PTHREAD_JOIN_FAILED = 0x20
+} RETCODE_FLAGS;
+
 typedef struct retcode_struct retcode;
 
 typedef struct retcode_struct {
-    uint32_t flags;
+    RETCODE_FLAGS flags;
     pthread_t self;
     char* basepath;
     retcode* prev;
@@ -82,7 +92,7 @@ typedef struct retcode_ll_struct {
     retcode* tail;
 } retcode_ll;
 
-retcode* node_init(thread_args* args);
+retcode* node_init(char* basepath, RETCODE_FLAGS flags);
 
 /**
  * Create and initialize a new list on the heap according to capacity 
@@ -104,18 +114,13 @@ int retcode_ll_add(retcode_ll* list, retcode* node);
  */
 retcode_ll* retcode_ll_concat(retcode_ll* dest, retcode_ll* src);
 
-void retcode_ll_flush(retcode_ll* list, FILE* logfile, pthread_mutex_t* logfile_lock);
-
 /**
- * "Poll" (join and get return value of) a particular thread whose pthread_t ID
- * is stored within a list's underlying array at `index`.
- *
- * Returns: return value of pthread_join (0 on success/errno on failure), or -1
- * if wrapped retcode_ll_get() call failed at that index, with errno 
- * "forwarded" appropriately (see retcode_ll_get() header).
+ * Safely flush the contents of the retcode_ll `list` to the relevant logging 
+ * file specified by `logfile` by surrounding write operations with locks and
+ * unlocks on `logfile_lock`. Once writing is complete, free the space 
+ * associated with `list`.
  */
-int retcode_ll_pollthread(retcode_ll* list, void** retval_ptr, size_t index);
-
+void retcode_ll_flush(retcode_ll* list, FILE* logfile, pthread_mutex_t* logfile_lock);
 
 void retcode_ll_destroy(retcode_ll* list);
 
