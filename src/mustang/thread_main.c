@@ -25,7 +25,7 @@ void* thread_main(void* args) {
 
     if ((this_retcode) == NULL || (this_ll == NULL)) {
         threadarg_destroy(this_args);
-        return NULL; // TODO: correspondingly handle this from the parent side
+        return NULL; // Will be interpreted as flag CHILD_ALLOC_FAILED
     }
 
     DIR* cwd_handle = fdopendir(this_args->cwd_fd);

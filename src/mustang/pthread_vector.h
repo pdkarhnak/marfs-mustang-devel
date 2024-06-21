@@ -104,7 +104,7 @@ int pthread_vector_append(pthread_vector* vector, pthread_t id);
  * failure with errno set (EINVAL for bad vector, bad to_ret argument, or bad 
  * index).
  *
- * Users should check the integer return value first, then interpret the 
+ * NOTE: Users should check the integer return value first, then interpret the 
  * validity of *to_ret accordingly.
  */
 int at_index(pthread_vector* vector, int index, pthread_t* to_ret);

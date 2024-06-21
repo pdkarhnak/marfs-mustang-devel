@@ -133,8 +133,13 @@ retcode_ll* retcode_ll_concat(retcode_ll* dest, retcode_ll* src) {
     return dest;
 }
 
+/**
+ * A private function to clear and free a linked list of retcode nodes given a
+ * starting point. Particularly useful when wrapped by retcode_ll_flush so that
+ * a wrapped list is cleared and freed but the overarching retcode_ll struct is
+ * preserved for future use.
+ */
 void retcode_ll_cleanlist(retcode* start) { 
-
     if (start == NULL) {
         return;
     }
@@ -164,13 +169,16 @@ void retcode_ll_flush(retcode_ll* rll, FILE* logfile, pthread_mutex_t* logfile_l
 
     do {
         retcode* next_ref = current_node->next;
-        fprintf(logfile, "[thread %0lx]: exited with code %x\n", current_node->self, current_node->flags);
+        fprintf(logfile, "[thread %0lx]: exited with code %x (basepath: %s)\n", current_node->self, current_node->flags, current_node->basepath);
         current_node = next_ref;
     } while (current_node != NULL);
 
     pthread_mutex_unlock(logfile_lock);
 
     retcode_ll_cleanlist(rll->head);
+
+    // Reset the state of the associated list: size is zero and head and tail 
+    // are invalid since no nodes occupy the list
     rll->size = 0;
     rll->head = NULL;
     rll->tail = NULL;
