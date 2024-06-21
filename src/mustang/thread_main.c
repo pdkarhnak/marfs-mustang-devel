@@ -1,6 +1,20 @@
+#include <unistd.h>
+#include <string.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <dirent.h>
+#include <errno.h>
 #include "mustang_threading.h"
 #include "pthread_vector.h"
 #include "retcode_ll.h"
+
+#ifdef DEBUG
+#include <stdio.h>
+#include <assert.h>
+#define ID_MASK 0xFFFFFFFF
+#define SHORT_ID() (pthread_self() & ID_MASK)
+#endif
+
 
 void* thread_main(void* args) {
 
@@ -18,7 +32,7 @@ void* thread_main(void* args) {
 
     if (cwd_handle == NULL) {
         this_retcode->flags |= DIR_OPEN_FAILED;
-        retcode_ll_add(this_retcode);
+        retcode_ll_add(this_ll, this_retcode);
 
 #ifdef DEBUG
         pthread_mutex_lock(this_args->stdout_lock);
@@ -34,7 +48,7 @@ void* thread_main(void* args) {
 
     if (spawned_threads == NULL) {
         this_retcode->flags |= ALLOC_FAILED;
-        retcode_ll_add(this_retcode);
+        retcode_ll_add(this_ll, this_retcode);
         closedir(cwd_handle);
         threadarg_destroy(this_args);
         return (void*) this_ll;
@@ -74,7 +88,7 @@ void* thread_main(void* args) {
             if (createcode != 0) {
                 // TODO: log warning/error: EAGAIN (no system resources available/system-wide limit on threads encountered)
                 // Not strictly fail-deadly for this thread (just new threads will not be spawned)
-                this_retcode |= PTHREAD_CREATE_FAILED;
+                this_retcode->flags |= PTHREAD_CREATE_FAILED;
                 close(next_cwd_fd);
             } else {
                 pthread_vector_append(spawned_threads, next_id);
@@ -83,7 +97,7 @@ void* thread_main(void* args) {
             if (createcode == 0) {
                 pthread_mutex_lock(this_args->stdout_lock);
                 printf("[thread %0lx]: forked new thread (ID: %0lx) at basepath %s\n", 
-                        SHORT_ID(), (new_thread_ids[pts_count - 1] & 0xFFFF), current_entry->d_name);
+                        SHORT_ID(), (next_id & 0xFFFFFFFF), current_entry->d_name);
                 pthread_mutex_unlock(this_args->stdout_lock);
             }
 #endif
@@ -106,7 +120,7 @@ void* thread_main(void* args) {
 
     pthread_t to_join;
 
-    for (uint32_t thread_index = 0; thread_index < spawned_threads->size; thread_index += 1) {
+    for (int thread_index = 0; thread_index < spawned_threads->size; thread_index += 1) {
 
         int findcode = at_index(spawned_threads, thread_index, &to_join);
 
@@ -115,7 +129,7 @@ void* thread_main(void* args) {
         }
 
         retcode_ll* joined_ll; 
-        int joincode = pthread_join(to_join, &joined_ll);
+        int joincode = pthread_join(to_join, (void**) &joined_ll);
 
         if (joincode != 0) {
             this_retcode->flags |= PTHREAD_JOIN_FAILED;
@@ -130,10 +144,12 @@ void* thread_main(void* args) {
         this_ll = retcode_ll_concat(this_ll, joined_ll);
 
         if (this_ll->size >= RC_LL_LEN_MAX) {
-            retcode_ll_flush(this_ll, this_args->log_ptr, log_lock);
+            retcode_ll_flush(this_ll, this_args->log_ptr, this_args->log_lock);
         }
 
     }
+
+    retcode_ll_add(this_ll, this_retcode);
 
     pthread_vector_destroy(spawned_threads);
     threadarg_destroy(this_args);

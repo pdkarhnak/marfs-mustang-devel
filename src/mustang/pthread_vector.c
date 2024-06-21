@@ -60,7 +60,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <stdlib.h>
 #include <errno.h>
 
-pthread_vector* pthread_vector_init(uint32_t new_capacity) {
+pthread_vector* pthread_vector_init(int new_capacity) {
     pthread_t* new_list = calloc(new_capacity, sizeof(pthread_t));
 
     if (new_list == NULL) {
@@ -102,7 +102,7 @@ int pthread_vector_append(pthread_vector* vector, pthread_t id) {
     return 0;
 }
 
-int at_index(pthread_vector* vector, uint32_t index, pthread_t* to_ret) {
+int at_index(pthread_vector* vector, int index, pthread_t* to_ret) {
     if ((vector == NULL) || (to_ret == NULL) || (vector->threadlist == NULL)) {
         errno = EINVAL;
 

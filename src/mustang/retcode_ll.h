@@ -88,7 +88,7 @@ typedef struct retcode_struct {
 } retcode;
 
 typedef struct retcode_ll_struct {
-    uint32_t size;
+    int size;
     retcode* head;
     retcode* tail;
 } retcode_ll;

@@ -16,6 +16,7 @@
 #include "hashtable.h"
 #include "mustang_threading.h"
 #include "pthread_vector.h"
+#include "retcode_ll.h"
 
 #define WARN(message, errorcode) \
     printf("WARN: %s (%s)\n", message, strerror(errorcode));
@@ -23,7 +24,7 @@
 #define ERR(message, errorcode) \
     printf("ERROR: %s (%s)\n", message, strerror(errorcode));
 
-extern void* thread_routine(void* args);
+extern void* thread_main(void* args);
 
 int main(int argc, char** argv) {
 
@@ -78,35 +79,69 @@ int main(int argc, char** argv) {
         }
 #endif
 
-        thread_args* topdir_args = threadarg_init(output_table, &ht_lock, next_basepath, next_cwd_fd);
+        thread_args* topdir_args = threadarg_init(output_table, &ht_lock, next_basepath, next_cwd_fd, logfile_ptr, &logfile_lock);
 
 #ifdef DEBUG
         topdir_args->stdout_lock = &out_lock;        
 #endif
 
         pthread_t next_id;
-        pthread_create(&next_id, NULL, &thread_routine, (void*) topdir_args);
+        pthread_create(&next_id, NULL, &thread_main, (void*) topdir_args);
         pthread_vector_append(top_threads, next_id);
 
 #ifdef DEBUG
         pthread_mutex_lock(&out_lock);
-        printf("[thread %0lx -- parent]: created top thread with ID: %0lx and target basepath: '%s'\n", SHORT_SELFID(), SHORT_ID(top_pthread_set[index - 3]), next_basepath);
+        printf("[thread %0lx -- parent]: created top thread with ID: %0lx and target basepath: '%s'\n", SHORT_SELFID(), SHORT_ID(next_id), next_basepath);
         pthread_mutex_unlock(&out_lock);
 #endif
 
     }
  
     // TODO: convert to new retcode_ll scheme
-    size_t* perthread_retval;
+    pthread_t join_id;
 
-    for (int index = 0; index < (pt_vec->size); index += 1) {
-        pthread_vector_pollthread(pt_vec, (void**) &perthread_retval, index);
+    retcode_ll* parent_ll = retcode_ll_init();
+
+    retcode_ll* joined_ll;
+
+    for (int index = 0; index < top_threads->size; index += 1) {
+        int findcode = at_index(top_threads, index, &join_id);
+
+        if (findcode == -1) {
+            // TODO: log
+            continue;
+        }
+
+        int joincode = pthread_join(join_id, (void**) &joined_ll);
+
+        if (joincode != 0) {
 #ifdef DEBUG
-        pthread_mutex_lock(&out_lock);
-        printf("[thread %0lx -- parent]: Thread at index %d returned: %zu\n", SHORT_SELFID(), index, ((size_t) perthread_retval));
-        pthread_mutex_unlock(&out_lock);
+            pthread_mutex_lock(&out_lock);
+            printf("[thread %0lx -- parent]: ERROR: failed to join child thread with ID: %0lx\n", SHORT_SELFID(), SHORT_ID(join_id));
+            pthread_mutex_unlock(&out_lock);
 #endif
+            continue;
+        }
+
+        if (joined_ll == NULL) {
+#ifdef DEBUG
+            pthread_mutex_lock(&out_lock);
+            printf("[thread %0lx -- parent]: ERROR: child thread (ID %0lx) returned NULL (was unable to allocate memory).\n", SHORT_SELFID(), SHORT_ID(join_id));
+            pthread_mutex_unlock(&out_lock);
+            continue;
+#endif
+        }
+
+        parent_ll = retcode_ll_concat(parent_ll, joined_ll);
+
+        if (parent_ll->size >= RC_LL_LEN_MAX) {
+            retcode_ll_flush(parent_ll, logfile_ptr, &logfile_lock);    
+        }
+
     }
+
+    retcode_ll_flush(parent_ll, logfile_ptr, &logfile_lock);
+    retcode_ll_destroy(parent_ll);
 
 #ifdef DEBUG
     pthread_mutex_destroy(&out_lock);

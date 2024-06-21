@@ -60,7 +60,6 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #define __PTHREAD_VECTOR_H__
 
 #include <pthread.h>
-#include <stdint.h>
 
 #define DEFAULT_CAPACITY 8
 
@@ -73,8 +72,8 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
  * between threads.
  */
 typedef struct pthread_vector_struct {
-    uint32_t size;
-    uint32_t capacity;
+    int size;
+    int capacity;
     pthread_t* threadlist;
 } pthread_vector;
 
@@ -82,7 +81,7 @@ typedef struct pthread_vector_struct {
  * Initialize a vector on the heap according to `new_capacity`, including the
  * underlying pthread_t collection space.
  */
-pthread_vector* pthread_vector_init(uint32_t new_capacity);
+pthread_vector* pthread_vector_init(int new_capacity);
 
 /**
  * Add a pthread_t to the given vector, "silently" expanding the vector's 
@@ -108,7 +107,7 @@ int pthread_vector_append(pthread_vector* vector, pthread_t id);
  * Users should check the integer return value first, then interpret the 
  * validity of *to_ret accordingly.
  */
-int at_index(pthread_vector* vector, uint32_t index, pthread_t* to_ret);
+int at_index(pthread_vector* vector, int index, pthread_t* to_ret);
 
 /**
  * Destroy a vector, freeing any occupied space including the space for the 

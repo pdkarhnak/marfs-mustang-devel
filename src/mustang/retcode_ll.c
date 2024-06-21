@@ -141,6 +141,10 @@ void retcode_ll_cleanlist(retcode* start) {
 }
 
 void retcode_ll_flush(retcode_ll* rll, FILE* logfile, pthread_mutex_t* logfile_lock) {
+    if (rll->size == 0) {
+        return;
+    }
+
     pthread_mutex_lock(logfile_lock);
 
     retcode* current_node = rll->head;
@@ -154,6 +158,7 @@ void retcode_ll_flush(retcode_ll* rll, FILE* logfile, pthread_mutex_t* logfile_l
     pthread_mutex_unlock(logfile_lock);
 
     retcode_ll_cleanlist(rll->head);
+    rll->size = 0;
 }
 
 void retcode_ll_destroy(retcode_ll* rll) {
