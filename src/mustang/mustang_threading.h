@@ -59,27 +59,20 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #ifndef __MUSTANG_THREADING_H__
 #define __MUSTANG_THREADING_H__
 
-#ifndef THREADBUF_SIZE
-#define THREADBUF_SIZE 16
-#endif
-
-#ifndef NAMECACHE_SIZE
-#define NAMECACHE_SIZE 8
-#endif
-
 #include "hashtable.h"
-#include "namecache.h"
 #include <stdlib.h>
 #include <pthread.h>
 
-typedef struct threadcount_verifier_struct threadcount_verifier;
+// typedef struct threadcount_verifier_struct threadcount_verifier;
 
+/*
 typedef struct threadcount_verifier_struct {
     pthread_mutex_t* self_lock;
     pthread_cond_t* active_threads_cv;
     size_t active_threads;
     size_t max_threads;
 } threadcount_verifier;
+*/
 
 typedef struct thread_args_struct thread_args;
 
@@ -120,7 +113,7 @@ typedef struct thread_args_struct {
  * This should be called once in the thread which runs main() for an entire
  * `mustang` process.
  */
-threadcount_verifier* verifier_init(size_t threads_max, pthread_mutex_t* new_lock, pthread_cond_t* new_cv);
+// threadcount_verifier* verifier_init(size_t threads_max, pthread_mutex_t* new_lock, pthread_cond_t* new_cv);
 
 /**
  * Destroy a threadcount_verifier struct and its contents. This should be 
@@ -129,7 +122,7 @@ threadcount_verifier* verifier_init(size_t threads_max, pthread_mutex_t* new_loc
  * exited via pthread_join() calls in the parent (or `mustang` API calls like 
  * pthread_vector_pollthread()).
  */
-void verifier_destroy(threadcount_verifier* verifier);
+// void verifier_destroy(threadcount_verifier* verifier);
 
 /**
  * Initialize a new argument struct in preparation for the creation of a new
@@ -157,23 +150,5 @@ thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_f
  * which will traverse encountered subdirectories.
  */
 void threadarg_destroy(thread_args* args);
-
-/**
- * A wrapper for threads to synchronize based on the state of a threadcount
- * verifier (namely, the verifier's mutex and cv) and ensure that the number
- * of active threads (or, specifically, the number of threads performing 
- * "actual" traversal work) does not overwhelm the application argument for
- * the maximum number of active threads.
- */
-void verify_active_threads(threadcount_verifier* verifier);
-
-/**
- * A wrapper for threads to synchronize on a verifier; decrement the number
- * of active threads to indicate one fewer thread is performing "actual" 
- * traversal work; and broadcast on the verifier's condition variable to allow
- * waiting threads to wake up, return from verify_active_threads(), and begin
- * "actual" traversal work.
- */
-void signal_active_threads(threadcount_verifier* verifier);
 
 #endif
