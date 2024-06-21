@@ -72,6 +72,8 @@ retcode* node_init(char* new_basepath, RETCODE_FLAGS new_flags) {
     new_node->basepath = new_basepath;
     new_node->prev = NULL;
     new_node->next = NULL;
+
+    return new_node;
 }
 
 retcode_ll* retcode_ll_init(void) {
@@ -82,7 +84,6 @@ retcode_ll* retcode_ll_init(void) {
     }
 
     new_ll->size = 0;
-    new_ll->list = NULL;
     new_ll->head = NULL;
     new_ll->tail = NULL;
 
@@ -168,5 +169,4 @@ void retcode_ll_destroy(retcode_ll* rll) {
     rll->tail = NULL;
 
     free(rll);
-    rll = NULL;
 }

@@ -59,17 +59,16 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #ifndef __RETCODE_LL_H__
 #define __RETCODE_LL_H__
 
+#include <stdio.h>
 #include <stdint.h>
 #include <pthread.h>
 #include <stdlib.h>
-#include <errno.h>
-#include "mustang_threading.h"
 
 typedef enum {
     SUCCESS = 0x0,
     ALLOC_FAILED, /* 0x1 */
     DIR_OPEN_FAILED, /* 0x2 */
-    NEW_DIRFD_OPEN_FAILED = 0x4
+    NEW_DIRFD_OPEN_FAILED = 0x4,
     THREADARG_FORK_FAILED = 0x8,
     PTHREAD_CREATE_FAILED = 0x10,
     PTHREAD_JOIN_FAILED = 0x20
