@@ -1,28 +1,45 @@
 #include "mustang_threading.h"
+#include "pthread_vector.h"
+#include "retcode_ll.h"
 
 void* thread_main(void* args) {
 
-    size_t retval = 0;
     thread_args* this_args = (thread_args*) args;
 
-    verify_active_threads(this_args->tc_verifier);
+    retcode* this_retcode = node_init(this_args->basepath, SUCCESS);
+    retcode_ll* this_ll = retcode_ll_init();
+
+    if ((this_retcode) == NULL || (this_ll == NULL)) {
+        threadarg_destroy(this_args);
+        return NULL; // TODO: correspondingly handle this from the parent side
+    }
 
     DIR* cwd_handle = fdopendir(this_args->cwd_fd);
 
-#ifdef DEBUG
     if (cwd_handle == NULL) {
+        this_retcode->flags |= DIR_OPEN_FAILED;
+        retcode_ll_add(this_retcode);
+
+#ifdef DEBUG
         pthread_mutex_lock(this_args->stdout_lock);
         printf("ERROR: directory handle is NULL! (%s)\n", strerror(errno));
         pthread_mutex_unlock(this_args->stdout_lock);
-        pthread_exit((void*) 1);
-    }
 #endif
 
-    struct dirent* current_entry = readdir(cwd_handle);
+        threadarg_destroy(this_args);
+        return (void*) this_ll;
+    }
 
-    // Maintain a local buffer of pthread_ts to limit locking on the pthread_vector and "flush" pthread_ts in bulk
-    pthread_t new_thread_ids[16];
-    int pts_count = 0; // an index to keep track of how many pthread_ts to flush at one time
+    pthread_vector* spawned_threads = pthread_vector_init(DEFAULT_CAPACITY);
+
+    if (spawned_threads == NULL) {
+        this_retcode->flags |= ALLOC_FAILED;
+        retcode_ll_add(this_retcode);
+        threadarg_destroy(this_args);
+        return (void*) this_ll;
+    }
+
+    struct dirent* current_entry = readdir(cwd_handle);
 
     while (current_entry != NULL) {
         if (current_entry->d_type == DT_DIR) {
@@ -56,19 +73,6 @@ void* thread_main(void* args) {
             }
 #endif
 
-            // If 16 threads have been spawned from this thread, "flush" the 
-            // local buffer and add the corresponding pthread_ts to the shared 
-            // vector
-            if (pts_count == 16) {
-                int addcode = pthread_vector_appendset(this_args->pt_vector, new_thread_ids, 16);
-                pts_count = 0; // Unconditionally reset the pts_count to zero. The flush either completely succeeds or completely fails.
-
-                if (addcode != 0) {
-                    retval = addcode;
-                    // TODO: log error
-                }
-            }
-
         } else if (current_entry->d_type == DT_REG) {
 #ifdef DEBUG
             pthread_mutex_lock(this_args->stdout_lock);
@@ -80,49 +84,11 @@ void* thread_main(void* args) {
             put(this_args->hashtable, current_entry->d_name);
             pthread_mutex_unlock(this_args->hashtable_lock);
 
-        } else {
-
-            char* irregular_type;
-
-            switch(current_entry->d_type) {
-                case DT_BLK:
-                    irregular_type = "block device";
-                    break;
-                case DT_CHR:
-                    irregular_type = "character device";
-                    break;
-                case DT_FIFO:
-                    irregular_type = "FIFO/pipe";
-                    break;
-                case DT_LNK:
-                    irregular_type = "link";
-                    break;
-                case DT_SOCK:
-                    irregular_type = "socket";
-                    break;
-                default:
-                    irregular_type = "unknown";
-            }
-
-#ifdef DEBUG
-            pthread_mutex_lock(this_args->stdout_lock);
-            printf("[thread %0lx]: WARNING: ignoring irregular file \"%s\" (%s)\n", SHORT_ID(), current_entry->d_name, irregular_type);
-            pthread_mutex_unlock(this_args->stdout_lock);
-#endif
         }
 
         current_entry = readdir(cwd_handle);
     }
 
-    // Flush all remaining pthread_ts of spawned threads to the shared vector
-    int pt_flushcode = pthread_vector_appendset(this_args->pt_vector, new_thread_ids, pts_count);
-
-    if (pt_flushcode != 0) {
-        retval = pt_flushcode;
-        // TODO: log error
-    }
-
-    signal_active_threads(this_args->tc_verifier);
     threadarg_destroy(this_args);
     closedir(cwd_handle);
 
