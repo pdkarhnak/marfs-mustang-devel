@@ -64,6 +64,8 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <pthread.h>
 #include <stdlib.h>
 
+#define RC_LL_LEN_MAX 128
+
 typedef enum {
     SUCCESS = 0x0,
     ALLOC_FAILED, /* 0x1 */
@@ -71,7 +73,8 @@ typedef enum {
     NEW_DIRFD_OPEN_FAILED = 0x4,
     THREADARG_FORK_FAILED = 0x8,
     PTHREAD_CREATE_FAILED = 0x10,
-    PTHREAD_JOIN_FAILED = 0x20
+    PTHREAD_JOIN_FAILED = 0x20,
+    CHILD_ALLOC_FAILED = 0x40
 } RETCODE_FLAGS;
 
 typedef struct retcode_struct retcode;

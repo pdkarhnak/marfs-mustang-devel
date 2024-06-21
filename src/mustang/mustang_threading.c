@@ -71,7 +71,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #define SHORT_ID() (pthread_self() & ID_MASK)
 #endif
 
-thread_args* threadarg_init(hashtable* new_hashtable, pthread_mutex_t* new_ht_lock, char* new_basepath, int new_fd) {
+thread_args* threadarg_init(hashtable* new_hashtable, pthread_mutex_t* new_ht_lock, char* new_basepath, int new_fd, FILE* new_logfile, pthread_mutex_t* new_log_lock) {
     thread_args* new_args = (thread_args*) calloc(1, sizeof(thread_args));
 
     if ((new_args == NULL) || (errno == ENOMEM)) {
@@ -82,6 +82,8 @@ thread_args* threadarg_init(hashtable* new_hashtable, pthread_mutex_t* new_ht_lo
     new_args->hashtable_lock = new_ht_lock;
     new_args->basepath = new_basepath;
     new_args->cwd_fd = new_fd;
+    new_args->log_ptr = new_logfile;
+    new_args->log_lock = new_log_lock;
 
 #ifdef DEBUG
     new_args->stdout_lock = NULL;
@@ -104,6 +106,8 @@ thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_f
 
     new_args->basepath = new_basepath;
     new_args->cwd_fd = new_fd;
+    new_args->log_ptr = existing->log_ptr;
+    new_args->log_lock = existing->log_lock;
 
 #ifdef DEBUG
     new_args->stdout_lock = existing->stdout_lock;
@@ -115,7 +119,7 @@ thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_f
 void threadarg_destroy(thread_args* args) {
     free(args->basepath);
     args->basepath = NULL;
-    close(args->cwd_fd);
+    args->log_ptr = NULL;
 
     // TODO: (eventually) add in code to set marfs_config and marfs_position struct pointers to NULL
 

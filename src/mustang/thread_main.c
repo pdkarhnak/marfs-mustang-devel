@@ -35,6 +35,7 @@ void* thread_main(void* args) {
     if (spawned_threads == NULL) {
         this_retcode->flags |= ALLOC_FAILED;
         retcode_ll_add(this_retcode);
+        closedir(cwd_handle);
         threadarg_destroy(this_args);
         return (void*) this_ll;
     }
@@ -52,18 +53,32 @@ void* thread_main(void* args) {
   
             int next_cwd_fd = openat(this_args->cwd_fd, current_entry->d_name, O_RDONLY | O_DIRECTORY);
 
+            if (next_cwd_fd == -1) {
+                this_retcode->flags |= NEW_DIRFD_OPEN_FAILED;
+                current_entry = readdir(cwd_handle);
+                continue;
+            }
+
             thread_args* next_args = threadarg_fork(this_args, strndup(current_entry->d_name, strlen(current_entry->d_name)), next_cwd_fd);
 
-            int createcode = pthread_create(&new_thread_ids[pts_count], NULL, &thread_main, (void*) next_args);
+            if (next_args == NULL) {
+                this_retcode->flags |= THREADARG_FORK_FAILED;
+                close(next_cwd_fd);
+                current_entry = readdir(cwd_handle);
+                continue;
+            }
+
+            pthread_t next_id;
+            int createcode = pthread_create(&next_id, NULL, &thread_main, (void*) next_args);
 
             if (createcode != 0) {
                 // TODO: log warning/error: EAGAIN (no system resources available/system-wide limit on threads encountered)
                 // Not strictly fail-deadly for this thread (just new threads will not be spawned)
-                retval = EAGAIN;
+                this_retcode |= PTHREAD_CREATE_FAILED;
+                close(next_cwd_fd);
             } else {
-                pts_count += 1;
-            }
-
+                pthread_vector_append(spawned_threads, next_id);
+            } 
 #ifdef DEBUG
             if (createcode == 0) {
                 pthread_mutex_lock(this_args->stdout_lock);
@@ -89,9 +104,40 @@ void* thread_main(void* args) {
         current_entry = readdir(cwd_handle);
     }
 
+    pthread_t to_join;
+
+    for (uint32_t thread_index = 0; thread_index < spawned_threads->size; thread_index += 1) {
+
+        int findcode = at_index(spawned_threads, thread_index, &to_join);
+
+        if (findcode == -1) {
+            continue;
+        }
+
+        retcode_ll* joined_ll; 
+        int joincode = pthread_join(to_join, &joined_ll);
+
+        if (joincode != 0) {
+            this_retcode->flags |= PTHREAD_JOIN_FAILED;
+            continue;
+        }
+
+        if (joined_ll == NULL) {
+            this_retcode->flags |= CHILD_ALLOC_FAILED;
+            continue;
+        }
+
+        this_ll = retcode_ll_concat(this_ll, joined_ll);
+
+        if (this_ll->size >= RC_LL_LEN_MAX) {
+            retcode_ll_flush(this_ll, this_args->log_ptr, log_lock);
+        }
+
+    }
+
     threadarg_destroy(this_args);
     closedir(cwd_handle);
 
-    return ((void*) retval);
+    return (void*) this_ll;
 
 }

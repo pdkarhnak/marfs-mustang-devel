@@ -60,6 +60,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #define __MUSTANG_THREADING_H__
 
 #include "hashtable.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
 
@@ -79,7 +80,7 @@ typedef struct thread_args_struct thread_args;
 typedef struct thread_args_struct {
     // Synchronization components to enforce a maximum number of active threads
     // at one time.
-    threadcount_verifier* tc_verifier;
+    // threadcount_verifier* tc_verifier;
 
     // MarFS context components for this thread: position and config
     /*
@@ -98,6 +99,9 @@ typedef struct thread_args_struct {
 
     // Parent-created file descriptor to properly isolate child's new cwd
     int cwd_fd;
+
+    FILE* log_ptr;
+    pthread_mutex_t* log_lock;
 
 #ifdef DEBUG
     pthread_mutex_t* stdout_lock;
@@ -132,7 +136,7 @@ typedef struct thread_args_struct {
  * is used as documented below for all other thread creation occurring in 
  * threads besides the top-level thread.
  */
-thread_args* threadarg_init(hashtable* new_hashtable, pthread_mutex_t* new_ht_lock, char* new_basepath, int new_fd);
+thread_args* threadarg_init(hashtable* new_hashtable, pthread_mutex_t* new_ht_lock, char* new_basepath, int new_fd, FILE* new_logfile, pthread_mutex_t* new_log_lock);
 
 /**
  * "fork" a thread's arguments in preparation for the creation of a new thread
