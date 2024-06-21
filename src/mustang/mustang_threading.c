@@ -71,16 +71,13 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #define SHORT_ID() (pthread_self() & ID_MASK)
 #endif
 
-thread_args* threadarg_init(threadcount_verifier* new_verifier, pthread_vector* new_vector, 
-        hashtable* new_hashtable, pthread_mutex_t* new_ht_lock, char* new_basepath, int new_fd) {
+thread_args* threadarg_init(hashtable* new_hashtable, pthread_mutex_t* new_ht_lock, char* new_basepath, int new_fd) {
     thread_args* new_args = (thread_args*) calloc(1, sizeof(thread_args));
 
     if ((new_args == NULL) || (errno == ENOMEM)) {
         return NULL;
     }
 
-    new_args->tc_verifier = new_verifier;
-    new_args->pt_vector = new_vector;
     new_args->hashtable = new_hashtable;
     new_args->hashtable_lock = new_ht_lock;
     new_args->basepath = new_basepath;
@@ -100,8 +97,6 @@ thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_f
         return NULL;
     }
 
-    new_args->tc_verifier = existing->tc_verifier;
-    new_args->pt_vector = existing->pt_vector;
     new_args->hashtable = existing->hashtable;
     new_args->hashtable_lock = existing->hashtable_lock;
 
