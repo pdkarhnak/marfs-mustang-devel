@@ -11,7 +11,7 @@ all: mustang_engine
 mustang_engine: mustang_engine.c libmustang.a
 	$(CC) $(CFLAGS) $(MARFS_CFLAGS) $< -o $@ $(LDFLAGS) -lpthread -L. -lmustang $(MARFS_LDFLAGS) -Wl,-rpath,$(MARFS_PREFIX)/lib -lmarfs
 
-libmustang.a: pthread_vector.o mustang_threading.o hashtable.o namecache.o
+libmustang.a: pthread_vector.o mustang_threading.o hashtable.o retcode_ll.o
 	ar rcs $@ $^
 
 %.o: %.c %.h

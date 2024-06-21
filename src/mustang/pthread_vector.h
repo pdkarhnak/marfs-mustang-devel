@@ -62,6 +62,8 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <pthread.h>
 #include <stdint.h>
 
+#define DEFAULT_CAPACITY 8
+
 /**
  * A very simple dynamic array to locally store pthread_ts corresponding to 
  * threads that a particular thread creates to traverse relevant 

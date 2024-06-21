@@ -127,5 +127,4 @@ void pthread_vector_destroy(pthread_vector* vector) {
     free(vector->threadlist);
     vector->size = 0;
     free(vector);
-    vector = NULL;
 }
