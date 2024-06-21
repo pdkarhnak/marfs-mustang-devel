@@ -135,6 +135,7 @@ void* thread_main(void* args) {
 
     }
 
+    pthread_vector_destroy(spawned_threads);
     threadarg_destroy(this_args);
     closedir(cwd_handle);
 

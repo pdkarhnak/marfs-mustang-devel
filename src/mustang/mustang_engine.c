@@ -28,49 +28,43 @@ extern void* thread_routine(void* args);
 int main(int argc, char** argv) {
 
     if (argc < 4) {
-        printf("USAGE: ./mustang-engine [output file] [max threads] [paths, ...]\n");
+        printf("USAGE: ./mustang-engine [output file] [log file] [max threads] [paths, ...]\n");
         printf("\tHINT: see mustang wrapper or invoke \"mustang -h\" for more details.\n");
         return 1;
     }
 
-    char* output_filepath = argv[1];
-    FILE* output_ptr = fopen(output_filepath, "w");
+    FILE* output_ptr = fopen(argv[1], "w");
+    FILE* logfile_ptr = fopen(argv[2], "w");
 
     if (output_ptr == NULL) {
         printf("ERROR: failed to open file \"%s\"\n", argv[1]);
         return 1;
     }
 
+    if (logfile_ptr == NULL) {
+        printf("ERROR: failed to open file \"%s\"\n", argv[2]);
+    }
+
     hashtable* output_table = hashtable_init();
     
-    pthread_mutex_t ht_lock;
-    pthread_mutex_init(&ht_lock, NULL);
+    if ((output_table == NULL) || (errno == ENOMEM)) {
+        ERR("No memory left--failed to allocate hashtable.", errno)
+        return 1;
+    }
 
-    pthread_mutex_t verifier_lock;
-    pthread_mutex_init(&verifier_lock, NULL);
+    pthread_mutex_t ht_lock = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_t logfile_lock = PTHREAD_MUTEX_INITIALIZER;
 
-    pthread_cond_t verifier_cv;
-    pthread_cond_init(&verifier_cv, NULL);
-
-    const size_t max_threads = ((size_t) atol(argv[2]));
-
-    threadcount_verifier* verifier = verifier_init(max_threads, &verifier_lock, &verifier_cv);
+    const size_t max_threads = ((size_t) atol(argv[3]));
 
 #ifdef DEBUG
     pthread_mutex_t out_lock;
     pthread_mutex_init(&out_lock, NULL);
 #endif
 
-    pthread_vector* pt_vec = pthread_vector_init(max_threads);
+    pthread_vector* top_threads = pthread_vector_init(DEFAULT_CAPACITY);
 
-    if ((output_table == NULL) || (errno == ENOMEM)) {
-        ERR("No memory left--failed to allocate hashtable.", errno)
-        return 1;
-    }
-
-    pthread_t top_pthread_set[argc-3];
-
-    for (int index = 3; index < argc; index += 1) {
+    for (int index = 4; index < argc; index += 1) {
 
         int next_cwd_fd = open(argv[index], O_RDONLY | O_DIRECTORY);
         char* next_basepath = strndup(argv[index], strlen(argv[index]));
@@ -84,13 +78,15 @@ int main(int argc, char** argv) {
         }
 #endif
 
-        thread_args* topdir_args = threadarg_init(verifier, pt_vec, output_table, &ht_lock, next_basepath, next_cwd_fd);
+        thread_args* topdir_args = threadarg_init(output_table, &ht_lock, next_basepath, next_cwd_fd);
 
 #ifdef DEBUG
         topdir_args->stdout_lock = &out_lock;        
 #endif
 
-        pthread_create(&top_pthread_set[index - 3], NULL, &thread_routine, (void*) topdir_args);
+        pthread_t next_id;
+        pthread_create(&next_id, NULL, &thread_routine, (void*) topdir_args);
+        pthread_vector_append(top_threads, next_id);
 
 #ifdef DEBUG
         pthread_mutex_lock(&out_lock);
@@ -99,9 +95,8 @@ int main(int argc, char** argv) {
 #endif
 
     }
-
-    pthread_vector_appendset(pt_vec, top_pthread_set, 1);
-    
+ 
+    // TODO: convert to new retcode_ll scheme
     size_t* perthread_retval;
 
     for (int index = 0; index < (pt_vec->size); index += 1) {
@@ -119,9 +114,9 @@ int main(int argc, char** argv) {
 
     hashtable_dump(output_table, output_ptr);
     fclose(output_ptr);
+    fclose(logfile_ptr);
 
-    verifier_destroy(verifier);
-    pthread_vector_destroy(pt_vec);
+    pthread_vector_destroy(top_threads);
     hashtable_destroy(output_table);
     pthread_mutex_destroy(&ht_lock);
 
