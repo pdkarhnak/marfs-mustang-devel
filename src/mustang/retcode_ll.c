@@ -56,153 +56,117 @@ LANL contributions is found at https://github.com/jti-lanl/aws4c.
 GNU licenses can be found at http://www.gnu.org/licenses/.
 */
 
-#include "pthread_vector.h"
+#include "retcode_ll.h"
+#include <stdlib.h>
+#include <errno.h>
 
-pthread_vector* pthread_vector_init(size_t new_capacity) {
-    pthread_vector* new_vector = (pthread_vector*) calloc(1, sizeof(pthread_vector));
-
-    if (new_vector == NULL || (errno == ENOMEM)) {
-        // TODO: log error (failed to calloc() new vector/ENOMEM)
-        return NULL;
-    }
-
-    new_vector->size = 0;
-    new_vector->capacity = new_capacity;
-    pthread_t* new_pthread_t_array = (pthread_t*) calloc(new_capacity, sizeof(pthread_t));
-
-    if (new_pthread_t_array == NULL || (errno == ENOMEM)) {
-        // TODO: log error (failed to calloc() vector's pthread_t array/ENOMEM)
-        return NULL;
-    }
-
-    new_vector->pthread_id_array = new_pthread_t_array;
+retcode* node_init(char* new_basepath, RETCODE_FLAGS new_flags) {
+    retcode* new_node = calloc(1, sizeof(retcode));
     
-    pthread_mutex_t* new_array_lock = (pthread_mutex_t*) calloc(1, sizeof(pthread_mutex_t));
-    int lock_init_code = pthread_mutex_init(new_array_lock, NULL);
-
-    if (lock_init_code != 0) {
-        // TODO: log error (macro?) (failed to init vector's mutex)
+    if (new_node == NULL) {
         return NULL;
     }
 
-    new_vector->array_lock = new_array_lock;
-
-    return new_vector;
+    new_node->self = pthread_self();
+    new_node->flags = new_flags;
+    new_node->basepath = new_basepath;
+    new_node->prev = NULL;
+    new_node->next = NULL;
 }
 
-pthread_t pthread_vector_get(pthread_vector* vector, size_t index) {
-    if (vector == NULL) {
-        // TODO: log warning (vector NULL -- ignoring call)
+retcode_ll* retcode_ll_init(void) {
+    retcode_ll* new_ll = calloc(1, sizeof(retcode_ll));
+
+    if (new_ll == NULL) {
+        return NULL;
+    }
+
+    new_ll->size = 0;
+    new_ll->list = NULL;
+    new_ll->head = NULL;
+    new_ll->tail = NULL;
+
+    return new_ll;
+}
+
+int retcode_ll_add(retcode_ll* rll, retcode* node) {
+    if ((rll == NULL) || (node == NULL)) {
         errno = EINVAL;
+        return -1;
+    }
+
+    if (rll->size == 0) {
+        rll->head = node;
+        rll->tail = node;
+        rll->size += 1;
         return 0;
     }
 
-    pthread_t returned_id;
-
-    pthread_mutex_lock(vector->array_lock);
-
-    if ((index > vector->size) || (vector->pthread_id_array == NULL)) {
-        // TODO: log error (bad index, or vector's pthread_id_array has already been destroyed)
-        pthread_mutex_unlock(vector->array_lock);
-        errno = EINVAL;
-        return 0;
-    }
-
-    returned_id = (vector->pthread_id_array)[index];
-    pthread_mutex_unlock(vector->array_lock);
-
-    return returned_id;
-}
-
-/**
- * A private function to wrap size and capacity checks, as well as error 
- * handling on realloc() failure, for the public pthread_vector_appendset().
- *
- * DO NOT attempt to call this function directly--this function presumes a 
- * caller has already locked this vector's corresponding mutex, which a 
- * pthread_vector_appendset() call will satisfy but which a direct call will 
- * not.
- */
-int pthread_vector_append(pthread_vector* vector, pthread_t new_thread_id) {
-    if (vector->size >= vector->capacity) {
-        vector->pthread_id_array = realloc(vector->pthread_id_array, (2 * (vector->capacity) * sizeof(pthread_t)));
-
-        if (errno == ENOMEM) {
-            // TODO: log error
-            return -1;
-        }
-
-        vector->capacity *= 2;
-    }
-
-    (vector->pthread_id_array)[vector->size] = new_thread_id;
-    vector->size += 1;
-
+    rll->tail->next = node;
+    node->prev = rll->tail;
+    rll->tail = node;
+    rll->size += 1;
     return 0;
 }
 
-int pthread_vector_appendset(pthread_vector* vector, pthread_t* thread_ids, size_t count) {
-
-    if (vector == NULL) {
-        // TODO: log warning (vector NULL)
-        errno = EINVAL;
-        return -1;
+retcode_ll* retcode_ll_concat(retcode_ll* dest, retcode_ll* src) {
+    if ((dest == NULL) || (src == NULL)) {
+        return NULL;
     }
 
-    pthread_mutex_lock(vector->array_lock);
+    dest->tail->next = src->head;
+    src->head->prev = dest->tail;
+    dest->tail = src->tail;
+    dest->size += src->size;
 
-    if (vector->pthread_id_array == NULL) {
-        pthread_mutex_unlock(vector->array_lock);
-        // TODO: log error (vector's pthread ID array has already been destroyed)
-        errno = EINVAL;
-        return -1;
-    }
-    
-    int retval = 0;
+    free(src);
 
-    for (size_t index = 0; index < count; index += 1) {
-        retval = pthread_vector_append(vector, thread_ids[index]);
-
-        if (retval == -1) {
-            pthread_mutex_unlock(vector->array_lock);
-            // TODO: log error (could not append--ENOMEM)
-            return retval;
-        }
-    }
-
-    pthread_mutex_unlock(vector->array_lock);
-
-    return retval;
+    return dest;
 }
 
-int pthread_vector_pollthread(pthread_vector* vector, void** retval_ptr, size_t index) {
-    pthread_t joined_thread = pthread_vector_get(vector, index);
-    
-    if ((joined_thread == 0) && (errno == EINVAL)) {
-        return -1;
-    }
+void retcode_ll_cleanlist(retcode* start) { 
+    retcode* destroyed_node = start;
 
-    return pthread_join(joined_thread, retval_ptr);
+    do {
+        retcode* next_ref = destroyed_node->next;
+        destroyed_node->prev = NULL;
+        destroyed_node->next = NULL;
+
+        free(destroyed_node->basepath);
+        free(destroyed_node);
+
+        destroyed_node = next_ref;
+    } while (destroyed_node != NULL);
 }
 
-void pthread_vector_destroy(pthread_vector* vector) {
+void retcode_ll_flush(retcode_ll* rll, FILE* logfile, pthread_mutex_t* logfile_lock) {
+    pthread_mutex_lock(logfile_lock);
 
-    if (vector == NULL) {
-        // TODO: log warning (vector NULL)
+    retcode* current_node = rll->head;
+
+    do {
+        retcode* next_ref = current_node->next;
+        fprintf(logfile, "[thread %0lx]: exited with code %x\n", current_node->self, current_node->flags);
+        current_node = next_ref;
+    } while (current_node != NULL);
+
+    pthread_mutex_unlock(logfile_lock);
+
+    retcode_ll_cleanlist(rll->head);
+}
+
+void retcode_ll_destroy(retcode_ll* rll) {
+    if (rll == NULL) {
+        // TODO: log warning (list NULL)
         errno = EINVAL;
         return;
     }
 
-    pthread_mutex_lock(vector->array_lock);
+    retcode_ll_cleanlist(rll->head);
 
-    vector->size = 0;
-    vector->capacity = 0;
-    free(vector->pthread_id_array);
-    vector->pthread_id_array = NULL;
+    rll->head = NULL;
+    rll->tail = NULL;
 
-    pthread_mutex_unlock(vector->array_lock);
-    pthread_mutex_destroy(vector->array_lock);
-    free(vector->array_lock);
-
-    free(vector);
+    free(rll);
+    rll = NULL;
 }

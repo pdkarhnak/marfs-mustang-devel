@@ -78,8 +78,8 @@ typedef enum {
 typedef struct retcode_struct retcode;
 
 typedef struct retcode_struct {
-    RETCODE_FLAGS flags;
     pthread_t self;
+    RETCODE_FLAGS flags;
     char* basepath;
     retcode* prev;
     retcode* next;
@@ -87,12 +87,11 @@ typedef struct retcode_struct {
 
 typedef struct retcode_ll_struct {
     uint32_t size;
-    retcode* list;
     retcode* head;
     retcode* tail;
 } retcode_ll;
 
-retcode* node_init(char* basepath, RETCODE_FLAGS flags);
+retcode* node_init(char* new_basepath, RETCODE_FLAGS new_flags);
 
 /**
  * Create and initialize a new list on the heap according to capacity 
@@ -102,12 +101,12 @@ retcode* node_init(char* basepath, RETCODE_FLAGS flags);
  * Returns: valid heap pointer to a retcode_ll on success, or NULL on 
  * failure with errno set to ENOMEM from wrapped calloc() calls.
  */
-retcode_ll* retcode_ll_init(size_t new_capacity);
+retcode_ll* retcode_ll_init(void);
 
 /**
  * Inserts a new node at the tail 
  */
-int retcode_ll_add(retcode_ll* list, retcode* node);
+int retcode_ll_add(retcode_ll* rll, retcode* node);
 
 /**
  * Concatenate 
@@ -120,8 +119,8 @@ retcode_ll* retcode_ll_concat(retcode_ll* dest, retcode_ll* src);
  * unlocks on `logfile_lock`. Once writing is complete, empty (free) the space
  * associated with the retcode collection of `list`.
  */
-void retcode_ll_flush(retcode_ll* list, FILE* logfile, pthread_mutex_t* logfile_lock);
+void retcode_ll_flush(retcode_ll* rll, FILE* logfile, pthread_mutex_t* logfile_lock);
 
-void retcode_ll_destroy(retcode_ll* list);
+void retcode_ll_destroy(retcode_ll* rll);
 
 #endif
