@@ -115,6 +115,14 @@ retcode_ll* retcode_ll_concat(retcode_ll* dest, retcode_ll* src) {
         return NULL;
     }
 
+    if (dest->size == 0) {
+        dest->head = src->head;
+        dest->tail = src->tail;
+        dest->size = src->size;
+        free(src);
+        return dest;
+    }
+
     dest->tail->next = src->head;
     src->head->prev = dest->tail;
     dest->tail = src->tail;
@@ -126,6 +134,11 @@ retcode_ll* retcode_ll_concat(retcode_ll* dest, retcode_ll* src) {
 }
 
 void retcode_ll_cleanlist(retcode* start) { 
+
+    if (start == NULL) {
+        return;
+    }
+
     retcode* destroyed_node = start;
 
     do {
@@ -159,6 +172,8 @@ void retcode_ll_flush(retcode_ll* rll, FILE* logfile, pthread_mutex_t* logfile_l
 
     retcode_ll_cleanlist(rll->head);
     rll->size = 0;
+    rll->head = NULL;
+    rll->tail = NULL;
 }
 
 void retcode_ll_destroy(retcode_ll* rll) {

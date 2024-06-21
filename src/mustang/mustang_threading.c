@@ -117,7 +117,6 @@ thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_f
 }
 
 void threadarg_destroy(thread_args* args) {
-    free(args->basepath);
     args->basepath = NULL;
     args->log_ptr = NULL;
 

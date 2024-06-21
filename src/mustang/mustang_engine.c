@@ -114,6 +114,11 @@ int main(int argc, char** argv) {
 
         int joincode = pthread_join(join_id, (void**) &joined_ll);
 
+#ifdef DEBUG
+        assert(joined_ll->head != NULL);
+        assert(joined_ll->tail != NULL);
+#endif
+
         if (joincode != 0) {
 #ifdef DEBUG
             pthread_mutex_lock(&out_lock);
@@ -147,7 +152,10 @@ int main(int argc, char** argv) {
     pthread_mutex_destroy(&out_lock);
 #endif
 
+    pthread_mutex_lock(&ht_lock);
     hashtable_dump(output_table, output_ptr);
+    pthread_mutex_unlock(&ht_lock);
+
     fclose(output_ptr);
     fclose(logfile_ptr);
 
