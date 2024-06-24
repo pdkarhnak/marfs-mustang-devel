@@ -91,7 +91,7 @@ hashtable* hashtable_init(void);
 int hashtable_destroy(hashtable* table);
 
 /** 
- * The public method to get an associated value for a particular key.
+ * The public function to get an associated value for a particular key.
  * 
  * Given a name (intended alphanumeric object name string), return the stored
  * copy of the name if stored in the table.
@@ -102,7 +102,7 @@ int hashtable_destroy(hashtable* table);
 char* get(hashtable* table, char* name_key);
 
 /** 
- * The public method to insert an object name into a particular hash table.
+ * The public function to insert an object name into a particular hash table.
  *
  * For a given name key, compute the hashcode and insert the name at the
  * appropriate index within the hashtable.
@@ -114,6 +114,17 @@ char* get(hashtable* table, char* name_key);
  */
 void put(hashtable* table, char* new_object_name);
 
+/**
+ * A helper function to print the contents of non-NULL hashnodes in a hashtable
+ * to the file referenced by the pointer `output`.
+ *
+ * NOTE: this function assumes any synchronization measures (locking an 
+ * associated mutex for hashtable `table`, etc.) have already been taken. In 
+ * mustang, the engine (main routine) locks and unlocks the associated mutex 
+ * around a call to this function to satisfy the synchronization assumptions.
+ * Do not otherwise call this function without appropriately synchronizing on 
+ * the hashtable.
+ */
 void hashtable_dump(hashtable* table, FILE* output);
 
 #endif
