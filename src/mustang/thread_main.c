@@ -1,3 +1,61 @@
+/*
+Copyright (c) 2015, Los Alamos National Security, LLC
+All rights reserved.
+
+Copyright 2015.  Los Alamos National Security, LLC. This software was
+produced under U.S. Government contract DE-AC52-06NA25396 for Los
+Alamos National Laboratory (LANL), which is operated by Los Alamos
+National Security, LLC for the U.S. Department of Energy. The
+U.S. Government has rights to use, reproduce, and distribute this
+software.  NEITHER THE GOVERNMENT NOR LOS ALAMOS NATIONAL SECURITY,
+LLC MAKES ANY WARRANTY, EXPRESS OR IMPLIED, OR ASSUMES ANY LIABILITY
+FOR THE USE OF THIS SOFTWARE.  If software is modified to produce
+derivative works, such modified software should be clearly marked, so
+as not to confuse it with the version available from LANL.
+ 
+Additionally, redistribution and use in source and binary forms, with
+or without modification, are permitted provided that the following
+conditions are met: 1. Redistributions of source code must retain the
+above copyright notice, this list of conditions and the following
+disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+3. Neither the name of Los Alamos National Security, LLC, Los Alamos
+National Laboratory, LANL, the U.S. Government, nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY LOS ALAMOS NATIONAL SECURITY, LLC AND
+CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
+BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL LOS
+ALAMOS NATIONAL SECURITY, LLC OR CONTRIBUTORS BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+-----
+NOTE:
+-----
+MarFS is released under the BSD license.
+
+MarFS was reviewed and released by LANL under Los Alamos Computer Code
+identifier: LA-CC-15-039.
+
+MarFS uses libaws4c for Amazon S3 object communication. The original version
+is at https://aws.amazon.com/code/Amazon-S3/2601 and under the LGPL license.
+LANL added functionality to the original work. The original work plus
+LANL contributions is found at https://github.com/jti-lanl/aws4c.
+
+GNU licenses can be found at http://www.gnu.org/licenses/.
+*/
+
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
@@ -15,10 +73,11 @@
 #define SHORT_ID() (pthread_self() & ID_MASK)
 #endif
 
-
 void* thread_main(void* args) {
 
     thread_args* this_args = (thread_args*) args;
+
+    active_threads_probe(this_args->tc_verifier);
 
     retcode* this_retcode = node_init(this_args->basepath, SUCCESS);
     retcode_ll* this_ll = retcode_ll_init();
@@ -86,7 +145,6 @@ void* thread_main(void* args) {
             int createcode = pthread_create(&next_id, NULL, &thread_main, (void*) next_args);
 
             if (createcode != 0) {
-                // TODO: log warning/error: EAGAIN (no system resources available/system-wide limit on threads encountered)
                 // Not strictly fail-deadly for this thread (just new threads will not be spawned)
                 this_retcode->flags |= PTHREAD_CREATE_FAILED;
                 close(next_cwd_fd);
@@ -152,6 +210,9 @@ void* thread_main(void* args) {
     retcode_ll_add(this_ll, this_retcode);
 
     pthread_vector_destroy(spawned_threads);
+
+    active_thread_vend(this_args->tc_verifier);
+
     threadarg_destroy(this_args);
     closedir(cwd_handle);
 

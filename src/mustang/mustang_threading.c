@@ -71,13 +71,55 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #define SHORT_ID() (pthread_self() & ID_MASK)
 #endif
 
-thread_args* threadarg_init(hashtable* new_hashtable, pthread_mutex_t* new_ht_lock, char* new_basepath, int new_fd, FILE* new_logfile, pthread_mutex_t* new_log_lock) {
+threadcount_verifier* verifier_init(size_t threads_max, pthread_mutex_t* new_lock, pthread_cond_t* new_cv) {
+    threadcount_verifier* new_verifier = (threadcount_verifier*) calloc(1, sizeof(threadcount_verifier));
+
+    if (new_verifier == NULL) {
+        return NULL;
+    }
+
+    new_verifier->self_lock = new_lock;
+    new_verifier->active_threads_cv = new_cv;
+    new_verifier->active_threads = 0;
+    new_verifier->max_threads = threads_max;
+
+    return new_verifier;
+}
+
+void verifier_destroy(threadcount_verifier* verifier) {
+    verifier->self_lock = NULL;
+    verifier->active_threads_cv = NULL;
+    free(verifier);
+}
+
+void active_threads_probe(threadcount_verifier* verifier) {
+    pthread_mutex_lock(verifier->self_lock);
+
+    while (verifier->active_threads >= verifier->max_threads) {
+        pthread_cond_wait(verifier->active_threads_cv, verifier->self_lock);
+    }
+
+    verifier->active_threads += 1;
+    pthread_mutex_unlock(verifier->self_lock);
+}
+
+void active_threads_vend(threadcount_verifier* verifier) {
+    pthread_mutex_lock(verifier->self_lock);
+    verifier->active_threads -= 1;
+    pthread_cond_broadcast(verifier->active_threads_cv);
+    pthread_mutex_unlock(verifier->self_lock);
+}
+
+thread_args* threadarg_init(threadcount_verifier* new_verifier, hashtable* new_hashtable, 
+        pthread_mutex_t* new_ht_lock, char* new_basepath, int new_fd, 
+        FILE* new_logfile, pthread_mutex_t* new_log_lock) {
     thread_args* new_args = (thread_args*) calloc(1, sizeof(thread_args));
 
     if ((new_args == NULL) || (errno == ENOMEM)) {
         return NULL;
     }
 
+    new_args->tc_verifier = new_verifier;
     new_args->hashtable = new_hashtable;
     new_args->hashtable_lock = new_ht_lock;
     new_args->basepath = new_basepath;
@@ -99,6 +141,7 @@ thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_f
         return NULL;
     }
 
+    new_args->tc_verifier = existing->tc_verifier;
     new_args->hashtable = existing->hashtable;
     new_args->hashtable_lock = existing->hashtable_lock;
 
