@@ -5,6 +5,8 @@
 #include <errno.h>
 #include <pthread.h>
 #include <marfs.h>
+#include <config/config.h>
+#include <datastream/datastream.h>
 
 #ifdef DEBUG
 #include <assert.h>
@@ -27,6 +29,8 @@
 extern void* thread_main(void* args);
 
 int main(int argc, char** argv) {
+
+    marfs_config* new_config = config_init();
 
     if (argc < 4) {
         printf("USAGE: ./mustang-engine [output file] [log file] [max threads] [paths, ...]\n");
