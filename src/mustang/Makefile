@@ -22,7 +22,7 @@ thread_main.o: thread_main.c
 	$(CC) $(CFLAGS) -c $<
 
 %.o: %.c %.h
-	$(CC) $(CFLAGS) $< -c $(LDLIBS)
+	$(CC) $(CFLAGS) $(MARFS_SRC_INCLUDE) $(INCLUDE_XML) $< -c $(LDLIBS)
 
 clean:
 	rm -f libmustang.a ./*.o mustang_engine ./*.tar.gz

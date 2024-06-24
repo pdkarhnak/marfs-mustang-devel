@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -21,16 +22,20 @@
 #include "retcode_ll.h"
 
 #define WARN(message, errorcode) \
-    printf("WARN: %s (%s)\n", message, strerror(errorcode));
+    printf("WARNING: %s (%s)\n", message, strerror(errorcode));
+
+#define WARN_MSG(message) \
+    printf("[thread %0lx -- parent] WARNING: %s\n", pthread_self(), message)
 
 #define ERR(message, errorcode) \
     printf("ERROR: %s (%s)\n", message, strerror(errorcode));
 
+#define ERR_MSG(message) \
+    printf("[thread %0lx -- parent] ERROR: %s\n", pthread_self(), message)
+
 extern void* thread_main(void* args);
 
 int main(int argc, char** argv) {
-
-    marfs_config* new_config = config_init();
 
     if (argc < 4) {
         printf("USAGE: ./mustang-engine [output file] [log file] [max threads] [paths, ...]\n");
@@ -69,6 +74,24 @@ int main(int argc, char** argv) {
 
     pthread_vector* top_threads = pthread_vector_init(DEFAULT_CAPACITY);
 
+    char* config_path = getenv("MARFS_CONFIG_PATH");
+
+    if (config_path == NULL) {
+        ERR_MSG("MARFS_CONFIG_PATH not set in environment--please set and try again.");
+        return 1;
+    }
+
+    pthread_mutex_t erasure_lock = PTHREAD_MUTEX_INITIALIZER;
+    marfs_config* parent_config = config_init(config_path, &erasure_lock);    
+
+    marfs_position parent_position = { .ns = NULL, .depth = 0, .ctxt = NULL };
+    int establishcode = config_establishposition(&parent_position, parent_config);
+
+    if (establishcode) {
+        ERR_MSG("Failed to establish marfs_position!");
+        return 1;
+    }
+    
     for (int index = 4; index < argc; index += 1) {
 
         int next_cwd_fd = open(argv[index], O_RDONLY | O_DIRECTORY);
@@ -83,7 +106,7 @@ int main(int argc, char** argv) {
         }
 #endif
 
-        thread_args* topdir_args = threadarg_init(output_table, &ht_lock, next_basepath, next_cwd_fd, logfile_ptr, &logfile_lock);
+        thread_args* topdir_args = threadarg_init(parent_config, &parent_position, output_table, &ht_lock, next_basepath, next_cwd_fd, logfile_ptr, &logfile_lock);
 
 #ifdef DEBUG
         topdir_args->stdout_lock = &out_lock;        
@@ -165,6 +188,14 @@ int main(int argc, char** argv) {
     pthread_vector_destroy(top_threads);
     hashtable_destroy(output_table);
     pthread_mutex_destroy(&ht_lock);
+
+    int config_termcode = config_term(parent_config);
+
+    if (config_termcode) {
+        WARN_MSG("Failed to terminate marfs_config!");
+    }
+
+    pthread_mutex_destroy(&erasure_lock);
 
     return 0;
 
