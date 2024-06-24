@@ -161,6 +161,10 @@ int main(int argc, char** argv) {
     fclose(output_ptr);
     fclose(logfile_ptr);
 
+    pthread_mutex_destroy(&verifier_lock);
+    pthread_cond_destroy(&verifier_cv);
+    verifier_destroy(shared_verifier);
+
     pthread_vector_destroy(top_threads);
     hashtable_destroy(output_table);
     pthread_mutex_destroy(&ht_lock);
