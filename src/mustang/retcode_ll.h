@@ -78,7 +78,8 @@ typedef enum {
     THREADARG_FORK_FAILED =     0x8,
     PTHREAD_CREATE_FAILED =     0x10,
     PTHREAD_JOIN_FAILED =       0x20,
-    CHILD_ALLOC_FAILED =        0x40 // Child couldn't set up and returned NULL
+    CHILD_ALLOC_FAILED =        0x40, /* Child couldn't set up and returned NULL */
+    CHILD_DUPPOS_FAILED =  0x80
 } RETCODE_FLAGS;
 
 typedef struct retcode_struct retcode;

@@ -85,6 +85,14 @@ void* thread_main(void* args) {
         return NULL; // Will be interpreted as flag CHILD_ALLOC_FAILED
     }
 
+    marfs_position local_position = { .ns = NULL, .depth = 0 };
+
+    if (config_duplicateposition(this_args->thread_position, &local_position)) {
+        this_retcode->flags |= CHILD_DUPPOS_FAILED;
+        threadarg_destroy(this_args);
+        return NULL;
+    }
+
     DIR* cwd_handle = fdopendir(this_args->cwd_fd);
 
     if (cwd_handle == NULL) {
