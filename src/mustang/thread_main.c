@@ -211,7 +211,7 @@ void* thread_main(void* args) {
 
     pthread_vector_destroy(spawned_threads);
 
-    active_thread_vend(this_args->tc_verifier);
+    active_threads_vend(this_args->tc_verifier);
 
     threadarg_destroy(this_args);
     closedir(cwd_handle);
