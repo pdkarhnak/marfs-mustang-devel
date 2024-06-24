@@ -76,9 +76,6 @@ typedef struct threadcount_verifier_struct {
 typedef struct thread_args_struct thread_args;
 
 typedef struct thread_args_struct {
-    // Synchronization components to enforce a maximum number of active threads
-    // at one time.
-    threadcount_verifier* tc_verifier;
 
     // MarFS context components for this thread: position and config
     /*
@@ -147,9 +144,8 @@ void active_threads_vend(threadcount_verifier* verifier);
  * is used as documented below for all other thread creation occurring in 
  * threads besides the top-level thread.
  */
-thread_args* threadarg_init(threadcount_verifier* new_verifier, hashtable* new_hashtable, 
-        pthread_mutex_t* new_ht_lock, char* new_basepath, int new_fd, 
-        FILE* new_logfile, pthread_mutex_t* new_log_lock);
+thread_args* threadarg_init(hashtable* new_hashtable, pthread_mutex_t* new_ht_lock, char* new_basepath, 
+        int new_fd, FILE* new_logfile, pthread_mutex_t* new_log_lock);
 
 /**
  * "fork" a thread's arguments in preparation for the creation of a new thread

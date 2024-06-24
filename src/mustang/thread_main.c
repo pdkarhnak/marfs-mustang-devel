@@ -77,8 +77,6 @@ void* thread_main(void* args) {
 
     thread_args* this_args = (thread_args*) args;
 
-    active_threads_probe(this_args->tc_verifier);
-
     retcode* this_retcode = node_init(this_args->basepath, SUCCESS);
     retcode_ll* this_ll = retcode_ll_init();
 
@@ -210,8 +208,6 @@ void* thread_main(void* args) {
     retcode_ll_add(this_ll, this_retcode);
 
     pthread_vector_destroy(spawned_threads);
-
-    active_threads_vend(this_args->tc_verifier);
 
     threadarg_destroy(this_args);
     closedir(cwd_handle);

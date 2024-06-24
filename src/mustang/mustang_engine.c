@@ -57,9 +57,6 @@ int main(int argc, char** argv) {
     pthread_mutex_t logfile_lock = PTHREAD_MUTEX_INITIALIZER;
 
     const size_t max_threads = ((size_t) atol(argv[3]));
-    pthread_mutex_t verifier_lock = PTHREAD_MUTEX_INITIALIZER;
-    pthread_cond_t verifier_cv = PTHREAD_COND_INITIALIZER;
-    threadcount_verifier* shared_verifier = verifier_init(max_threads, &verifier_lock, &verifier_cv);
 
 #ifdef DEBUG
     pthread_mutex_t out_lock;
@@ -82,7 +79,7 @@ int main(int argc, char** argv) {
         }
 #endif
 
-        thread_args* topdir_args = threadarg_init(shared_verifier, output_table, &ht_lock, next_basepath, next_cwd_fd, logfile_ptr, &logfile_lock);
+        thread_args* topdir_args = threadarg_init(output_table, &ht_lock, next_basepath, next_cwd_fd, logfile_ptr, &logfile_lock);
 
 #ifdef DEBUG
         topdir_args->stdout_lock = &out_lock;        
@@ -160,10 +157,6 @@ int main(int argc, char** argv) {
 
     fclose(output_ptr);
     fclose(logfile_ptr);
-
-    pthread_mutex_destroy(&verifier_lock);
-    pthread_cond_destroy(&verifier_cv);
-    verifier_destroy(shared_verifier);
 
     pthread_vector_destroy(top_threads);
     hashtable_destroy(output_table);

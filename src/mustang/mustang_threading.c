@@ -110,16 +110,14 @@ void active_threads_vend(threadcount_verifier* verifier) {
     pthread_mutex_unlock(verifier->self_lock);
 }
 
-thread_args* threadarg_init(threadcount_verifier* new_verifier, hashtable* new_hashtable, 
-        pthread_mutex_t* new_ht_lock, char* new_basepath, int new_fd, 
-        FILE* new_logfile, pthread_mutex_t* new_log_lock) {
+thread_args* threadarg_init(hashtable* new_hashtable, pthread_mutex_t* new_ht_lock, char* new_basepath, 
+        int new_fd, FILE* new_logfile, pthread_mutex_t* new_log_lock) {
     thread_args* new_args = (thread_args*) calloc(1, sizeof(thread_args));
 
     if ((new_args == NULL) || (errno == ENOMEM)) {
         return NULL;
     }
 
-    new_args->tc_verifier = new_verifier;
     new_args->hashtable = new_hashtable;
     new_args->hashtable_lock = new_ht_lock;
     new_args->basepath = new_basepath;
@@ -141,7 +139,6 @@ thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_f
         return NULL;
     }
 
-    new_args->tc_verifier = existing->tc_verifier;
     new_args->hashtable = existing->hashtable;
     new_args->hashtable_lock = existing->hashtable_lock;
 
