@@ -1,5 +1,6 @@
 #include "namecache.h"
 #include <stdlib.h>
+#include <string.h>
 
 nc_node* node_init(char* new_data) {
     nc_node* new_node = (nc_node*) calloc(1, sizeof(nc_node));
@@ -34,7 +35,8 @@ namecache* namecache_init(int new_capacity) {
     new_cache->head = NULL;
     new_cache->tail = NULL;
     new_cache->size = 0;
-    new_cache->capacity = new_capacity;
+
+    new_cache->capacity = (new_capacity > 0) ? new_capacity : NAMECACHE_CAP_DEFAULT;
 
     return new_cache;
 }
@@ -66,6 +68,10 @@ void namecache_destroy(namecache* cache) {
 int search_cache(namecache* cache, char* searched_data) {
     if (cache == NULL) {
         return -1;
+    }
+
+    if (cache->size == 0) {
+        return 0;
     }
 
     nc_node* searched_node = cache->head;
@@ -115,7 +121,7 @@ int namecache_enqueue(namecache* cache, char* new_data) {
 }
 
 void namecache_pluck(namecache* cache, char* keyword) {
-    if (!search_node(cache, keyword)) {
+    if (!search_cache(cache, keyword)) {
         return;
     }
 
