@@ -70,8 +70,8 @@ typedef struct thread_args_struct thread_args;
 typedef struct thread_args_struct {
 
     // MarFS context components for this thread: position and config
-    marfs_config* thread_config;
-    marfs_position* thread_position;
+    marfs_config* base_config;
+    marfs_position* base_position;
 
     // Synchronization for the output hashtable of object names
     hashtable* hashtable;
@@ -121,5 +121,7 @@ thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_f
  * which will traverse encountered subdirectories.
  */
 void threadarg_destroy(thread_args* args);
+
+// TODO: add ftag getter utility?
 
 #endif

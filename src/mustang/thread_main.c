@@ -62,6 +62,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <sys/types.h>
 #include <dirent.h>
 #include <errno.h>
+#include <mdal/mdal.h>
 #include "mustang_threading.h"
 #include "pthread_vector.h"
 #include "retcode_ll.h"
@@ -87,13 +88,23 @@ void* thread_main(void* args) {
 
     marfs_position local_position = { .ns = NULL, .depth = 0 };
 
-    if (config_duplicateposition(this_args->thread_position, &local_position)) {
-        this_retcode->flags |= CHILD_DUPPOS_FAILED;
+    if (config_duplicateposition(this_args->base_position, &local_position)) {
+        this_retcode->flags |= DUPPOS_FAILED;
         threadarg_destroy(this_args);
         return NULL;
     }
 
-    DIR* cwd_handle = fdopendir(this_args->cwd_fd);
+    int basepath_depth;
+    if ((basepath_depth = config_traverse(this_args->base_config, &local_position, &(this_args->basepath), 1)) < 0) {
+        this_retcode->flags |= TRAVERSE_FAILED;
+        config_abandonposition(&local_position);
+        threadarg_destroy(this_args);
+    }
+    
+    MDAL thread_mdal = ((local_position.ns)->prepo->metascheme).mdal;
+    MDAL_DHANDLE target_dir = NULL;
+
+    MDAL_DHANDLE cwd_handle = thread_mdal->opendir(this_args->cwd_fd);
 
     if (cwd_handle == NULL) {
         this_retcode->flags |= DIR_OPEN_FAILED;
@@ -119,7 +130,7 @@ void* thread_main(void* args) {
         return (void*) this_ll;
     }
 
-    struct dirent* current_entry = readdir(cwd_handle);
+    struct dirent* current_entry = thread_mdal->readdir(cwd_handle);
 
     while (current_entry != NULL) {
         if (current_entry->d_type == DT_DIR) {
@@ -129,12 +140,13 @@ void* thread_main(void* args) {
                 current_entry = readdir(cwd_handle);
                 continue;
             }
-  
+
+            // TODO: swap out openat() call for thread_mdal->opendir() call or similar
             int next_cwd_fd = openat(this_args->cwd_fd, current_entry->d_name, O_RDONLY | O_DIRECTORY);
 
             if (next_cwd_fd == -1) {
                 this_retcode->flags |= NEW_DIRFD_OPEN_FAILED;
-                current_entry = readdir(cwd_handle);
+                current_entry = thread_mdal->readdir(cwd_handle);
                 continue;
             }
 
@@ -143,7 +155,7 @@ void* thread_main(void* args) {
             if (next_args == NULL) {
                 this_retcode->flags |= THREADARG_FORK_FAILED;
                 close(next_cwd_fd);
-                current_entry = readdir(cwd_handle);
+                current_entry = thread_mdal->readdir(cwd_handle);
                 continue;
             }
 
@@ -172,6 +184,8 @@ void* thread_main(void* args) {
             printf("[thread %0lx]: recording file [%s]/'%s' in hashtable.\n", SHORT_ID(), this_args->basepath, current_entry->d_name);
             pthread_mutex_unlock(this_args->stdout_lock);
 #endif
+
+            // TODO: add logic to get ftag
 
             pthread_mutex_lock(this_args->hashtable_lock);
             put(this_args->hashtable, current_entry->d_name);
@@ -218,7 +232,8 @@ void* thread_main(void* args) {
     pthread_vector_destroy(spawned_threads);
 
     threadarg_destroy(this_args);
-    closedir(cwd_handle);
+
+    thread_mdal->closedir(cwd_handle);
 
     return (void*) this_ll;
 

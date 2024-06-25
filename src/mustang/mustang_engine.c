@@ -85,9 +85,8 @@ int main(int argc, char** argv) {
     marfs_config* parent_config = config_init(config_path, &erasure_lock);    
 
     marfs_position parent_position = { .ns = NULL, .depth = 0, .ctxt = NULL };
-    int establishcode = config_establishposition(&parent_position, parent_config);
 
-    if (establishcode) {
+    if (config_establishposition(&parent_position, parent_config)) {
         ERR_MSG("Failed to establish marfs_position!");
         return 1;
     }
@@ -140,11 +139,6 @@ int main(int argc, char** argv) {
 
         int joincode = pthread_join(join_id, (void**) &joined_ll);
 
-#ifdef DEBUG
-        assert(joined_ll->head != NULL);
-        assert(joined_ll->tail != NULL);
-#endif
-
         if (joincode != 0) {
 #ifdef DEBUG
             pthread_mutex_lock(&out_lock);
@@ -182,16 +176,23 @@ int main(int argc, char** argv) {
     hashtable_dump(output_table, output_ptr);
     pthread_mutex_unlock(&ht_lock);
 
-    fclose(output_ptr);
-    fclose(logfile_ptr);
+    if (fclose(output_ptr)) {
+        WARN("Failed to close output file pointer.", errno);
+    }
+
+    if (fclose(logfile_ptr)) {
+        WARN("Failed to close log file pointer.", errno);
+    }
 
     pthread_vector_destroy(top_threads);
     hashtable_destroy(output_table);
     pthread_mutex_destroy(&ht_lock);
 
-    int config_termcode = config_term(parent_config);
+    if (config_abandonposition(&parent_position)) {
+        WARN_MSG("Failed to abandon parent position!");
+    }
 
-    if (config_termcode) {
+    if (config_term(parent_config)) {
         WARN_MSG("Failed to terminate marfs_config!");
     }
 

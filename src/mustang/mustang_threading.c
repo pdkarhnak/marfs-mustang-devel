@@ -80,8 +80,8 @@ thread_args* threadarg_init(marfs_config* shared_config, marfs_position* shared_
         return NULL;
     }
 
-    new_args->thread_config = shared_config;
-    new_args->thread_position = shared_position;
+    new_args->base_config = shared_config;
+    new_args->base_position = shared_position;
     new_args->hashtable = new_hashtable;
     new_args->hashtable_lock = new_ht_lock;
     new_args->basepath = new_basepath;

@@ -79,7 +79,10 @@ typedef enum {
     PTHREAD_CREATE_FAILED =     0x10,
     PTHREAD_JOIN_FAILED =       0x20,
     CHILD_ALLOC_FAILED =        0x40, /* Child couldn't set up and returned NULL */
-    CHILD_DUPPOS_FAILED =  0x80
+    DUPPOS_FAILED =             0x80,
+    TRAVERSE_FAILED =           0x100,
+    CLOSEDIR_FAILED =           0x200,
+    ABANDONPOS_FAILED =         0x400
 } RETCODE_FLAGS;
 
 typedef struct retcode_struct retcode;
