@@ -64,6 +64,9 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <errno.h>
 #include <limits.h>
 #include <mdal/mdal.h>
+#include <tagging/tagging.h>
+#include <datastream/datastream.h>
+#include <ne/ne.h>
 #include "mustang_threading.h"
 #include "pthread_vector.h"
 #include "retcode_ll.h"
@@ -87,50 +90,6 @@ void* thread_main(void* args) {
         return NULL; // Will be interpreted as flag CHILD_ALLOC_FAILED
     }
 
-    marfs_position local_position = { .ns = NULL, .depth = 0 };
-
-    if (config_duplicateposition(this_args->base_position, &local_position)) {
-        this_retcode->flags |= DUPPOS_FAILED;
-        threadarg_destroy(this_args);
-        return NULL;
-    }
-
-    int basepath_depth;
-    if ((basepath_depth = config_traverse(this_args->base_config, &local_position, &(this_args->basepath), 1)) < 0) {
-        this_retcode->flags |= TRAVERSE_FAILED;
-        retcode_ll_add(this_ll, this_retcode);
-        config_abandonposition(&local_position);
-        threadarg_destroy(this_args);
-        return (void*) this_ll;
-    }
-    
-    if ((local_position.ctxt == NULL) && config_fortifyposition(&local_position)) {
-        this_retcode->flags |= FORTIFYPOS_FAILED;
-        retcode_ll_add(this_ll, this_retcode);
-        config_abandonposition(&local_position);
-        threadarg_destroy(this_args);
-        return (void*) this_ll;
-    }
-
-    MDAL thread_mdal = ((local_position.ns)->prepo->metascheme).mdal;
-    MDAL_DHANDLE target_dir = NULL;
-
-    MDAL_DHANDLE cwd_handle = thread_mdal->opendir(this_args->cwd_fd);
-
-    if (cwd_handle == NULL) {
-        this_retcode->flags |= DIR_OPEN_FAILED;
-        retcode_ll_add(this_ll, this_retcode);
-
-#ifdef DEBUG
-        pthread_mutex_lock(this_args->stdout_lock);
-        printf("ERROR: directory handle is NULL! (%s)\n", strerror(errno));
-        pthread_mutex_unlock(this_args->stdout_lock);
-#endif
-
-        threadarg_destroy(this_args);
-        return (void*) this_ll;
-    }
-
     pthread_vector* spawned_threads = pthread_vector_init(DEFAULT_CAPACITY);
 
     if (spawned_threads == NULL) {
@@ -148,7 +107,7 @@ void* thread_main(void* args) {
 
             // Skip current directory "." and parent directory ".." to avoid infinite loop in directory traversal
             if ( (strncmp(current_entry->d_name, ".", strlen(current_entry->d_name)) == 0) || (strncmp(current_entry->d_name, "..", strlen(current_entry->d_name)) == 0) ) {
-                current_entry = readdir(cwd_handle);
+                current_entry = thread_mdal->readdir(cwd_handle);
                 continue;
             }
 
@@ -174,7 +133,7 @@ void* thread_main(void* args) {
             int createcode = pthread_create(&next_id, NULL, &thread_main, (void*) next_args);
 
             if (createcode != 0) {
-                // Not strictly fail-deadly for this thread (just new threads will not be spawned)
+                // Not strictly fail-deadly for this thread (just new thread(s) will not be spawned)
                 this_retcode->flags |= PTHREAD_CREATE_FAILED;
                 close(next_cwd_fd);
             } else {
@@ -200,31 +159,38 @@ void* thread_main(void* args) {
             char* file_ftagstr = get_ftag(&local_position, thread_mdal, current_entry->d_name);
             FTAG retrieved_tag = {0};
             
-            if (ftag_initstr(&retrieved_tag, file_ftag)) {
+            if (ftag_initstr(&retrieved_tag, file_ftagstr)) {
                 this_retcode->flags |= FTAG_INIT_FAILED;
-                // readdir and continue
-            }
-
-            char* obj_id = (char*) calloc(PATH_MAX, sizeof(char));
-            if (ftag_datatgt(&retrieved_tag, obj_id, PATH_MAX) > PATH_MAX) {
-                this_retcode->flags |= OBJNAME_CONVERSION_FAILED;
-                free(obj_id);
-                // readdir and continue
+                free(file_ftagstr);
+                current_entry = thread_mdal->readdir(cwd_handle);
+                continue;
             }
 
             // TODO: calculate object bounds and iterate accordingly
+            size_t objno_min = retrieved_tag.objno;
+            size_t objno_max = datastream_filebounds(retrieved_tag);
+            char* retrieved_id = (char*) calloc(PATH_MAX, sizeof(char));
+            ne_erasure placeholder_erasure;
+            ne_location placeholder_location;
 
             // TODO: implement namecache optimization at some point
+            for (size_t i = objno_min; i <= objno_max; i += 1) {
+                retrieved_tag.objno = i;
+                if (datastream_objtarget(&retrieved_tag, /* pos->ns->prepo->datascheme */, &retrieved_id, &placeholder_erasure, &placeholder_location)) {
+                    // TODO: clean up this iteration, readdir, and continue
+                }
 
-            pthread_mutex_lock(this_args->hashtable_lock);
-            put(this_args->hashtable, obj_id);
-            pthread_mutex_unlock(this_args->hashtable_lock);
+                pthread_mutex_lock(this_args->hashtable_lock);
+                put(this_args->hashtable, retrieved_id);
+                pthread_mutex_unlock(this_args->hashtable_lock);
+            }
 
         }
 
         current_entry = readdir(cwd_handle);
     }
 
+    /* --- begin join and cleanup --- */
     pthread_t to_join;
 
     for (int thread_index = 0; thread_index < spawned_threads->size; thread_index += 1) {
