@@ -62,6 +62,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <sys/types.h>
 #include <dirent.h>
 #include <errno.h>
+#include <limits.h>
 #include <mdal/mdal.h>
 #include "mustang_threading.h"
 #include "pthread_vector.h"
@@ -97,10 +98,20 @@ void* thread_main(void* args) {
     int basepath_depth;
     if ((basepath_depth = config_traverse(this_args->base_config, &local_position, &(this_args->basepath), 1)) < 0) {
         this_retcode->flags |= TRAVERSE_FAILED;
+        retcode_ll_add(this_ll, this_retcode);
         config_abandonposition(&local_position);
         threadarg_destroy(this_args);
+        return (void*) this_ll;
     }
     
+    if ((local_position.ctxt == NULL) && config_fortifyposition(&local_position)) {
+        this_retcode->flags |= FORTIFYPOS_FAILED;
+        retcode_ll_add(this_ll, this_retcode);
+        config_abandonposition(&local_position);
+        threadarg_destroy(this_args);
+        return (void*) this_ll;
+    }
+
     MDAL thread_mdal = ((local_position.ns)->prepo->metascheme).mdal;
     MDAL_DHANDLE target_dir = NULL;
 
@@ -185,10 +196,28 @@ void* thread_main(void* args) {
             pthread_mutex_unlock(this_args->stdout_lock);
 #endif
 
-            // TODO: add logic to get ftag
+            // TODO: add logic to get ftag as str
+            char* file_ftagstr = get_ftag(&local_position, thread_mdal, current_entry->d_name);
+            FTAG retrieved_tag = {0};
+            
+            if (ftag_initstr(&retrieved_tag, file_ftag)) {
+                this_retcode->flags |= FTAG_INIT_FAILED;
+                // readdir and continue
+            }
+
+            char* obj_id = (char*) calloc(PATH_MAX, sizeof(char));
+            if (ftag_datatgt(&retrieved_tag, obj_id, PATH_MAX) > PATH_MAX) {
+                this_retcode->flags |= OBJNAME_CONVERSION_FAILED;
+                free(obj_id);
+                // readdir and continue
+            }
+
+            // TODO: calculate object bounds and iterate accordingly
+
+            // TODO: implement namecache optimization at some point
 
             pthread_mutex_lock(this_args->hashtable_lock);
-            put(this_args->hashtable, current_entry->d_name);
+            put(this_args->hashtable, obj_id);
             pthread_mutex_unlock(this_args->hashtable_lock);
 
         }
@@ -231,9 +260,15 @@ void* thread_main(void* args) {
 
     pthread_vector_destroy(spawned_threads);
 
-    threadarg_destroy(this_args);
+    if (thread_mdal->closedir(cwd_handle)) {
+        this_retcode->flags |= CLOSEDIR_FAILED;
+    }
 
-    thread_mdal->closedir(cwd_handle);
+    if (config_abandonposition(&local_position)) {
+        this_retcode->flags |= ABANDONPOS_FAILED;
+    }
+
+    threadarg_destroy(this_args);
 
     return (void*) this_ll;
 

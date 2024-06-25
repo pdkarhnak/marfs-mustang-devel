@@ -64,6 +64,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <stdlib.h>
 #include <pthread.h>
 #include <config/config.h>
+#include <mdal/mdal.h>
 
 typedef struct thread_args_struct thread_args;
 
@@ -123,5 +124,6 @@ thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_f
 void threadarg_destroy(thread_args* args);
 
 // TODO: add ftag getter utility?
+char* get_ftag(marfs_position* current_position, MDAL current_mdal, char* path);
 
 #endif

@@ -62,7 +62,12 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <sys/types.h>
 #include <dirent.h>
 #include <errno.h>
+#include <tagging/tagging.h>
 #include "mustang_threading.h"
+
+#ifndef ENOATTR
+#define ENOATTR ENODATA
+#endif
 
 #ifdef DEBUG
 #include <stdio.h>
@@ -130,3 +135,37 @@ void threadarg_destroy(thread_args* args) {
     free(args);
 }
 
+char* get_ftag(marfs_position* current_position, MDAL current_mdal, char* path) {
+    MDAL_FHANDLE target_handle = current_mdal->open(current_position->ctxt, path, O_RDONLY);
+    if (handle == NULL) {
+        return NULL;
+    }
+
+    char* ftag_str = NULL;
+    // 1 == hidden xattr
+    ssize_t ftag_len = current_mdal->fgetxattr(target_handle, 1, FTAG_NAME, ftag_str, 0); // Fetch initial length of ftag
+
+    if (ftag_len <= 0) {
+        current_mdal->close(target_handle);
+        errno = ENOATTR;
+        return NULL;
+    }
+
+    ftag_str = (char*) calloc((ftag_len + 1), sizeof(char));
+
+    if (ftag_str == NULL) {
+        current_mdal->close(target_handle);
+        errno = ENOMEM;
+        return NULL; 
+    }
+
+    if (current_mdal->fgetxattr(target_handle, 1, FTAG_NAME, ftagstr, ftag_len) != ftag_len) {
+        current_mdal->close(target_handle);
+        free(ftag_str);
+        errno = ESTALE;
+        return NULL;
+    }
+
+    current_mdal->close(target_handle);
+    return ftag_str;
+}
