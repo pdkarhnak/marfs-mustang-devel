@@ -66,8 +66,6 @@ int main(int argc, char** argv) {
     pthread_mutex_t ht_lock = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_t logfile_lock = PTHREAD_MUTEX_INITIALIZER;
 
-    const size_t max_threads = ((size_t) atol(argv[3]));
-
 #ifdef DEBUG
     pthread_mutex_t out_lock;
     pthread_mutex_init(&out_lock, NULL);
@@ -100,7 +98,7 @@ int main(int argc, char** argv) {
 
     MDAL parent_mdal = parent_position.ns->prepo->metascheme.mdal;
     
-    for (int index = 4; index < argc; index += 1) {
+    for (int index = 3; index < argc; index += 1) {
         marfs_position* child_position = calloc(1, sizeof(marfs_position));
         char* next_basepath = strndup(argv[index], strlen(argv[index]));
 
