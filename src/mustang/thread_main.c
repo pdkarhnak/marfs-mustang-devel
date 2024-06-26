@@ -235,7 +235,7 @@ void* thread_main(void* args) {
 
             // TODO: calculate object bounds and iterate accordingly
             size_t objno_min = retrieved_tag.objno;
-            size_t objno_max = datastream_filebounds(retrieved_tag);
+            size_t objno_max = datastream_filebounds(&retrieved_tag);
             retrieved_id = (char*) calloc(PATH_MAX, sizeof(char));
             ne_erasure placeholder_erasure;
             ne_location placeholder_location;
