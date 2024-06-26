@@ -71,7 +71,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
  * will produce a thread's return value in `thread_main`.
  */
 typedef enum {
-    SUCCESS =                   0x0,
+    RETCODE_SUCCESS =           0x0,
     ALLOC_FAILED,            /* 0x1 */
     DIR_OPEN_FAILED,         /* 0x2 */
     NEW_DIRFD_OPEN_FAILED =     0x4,

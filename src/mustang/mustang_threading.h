@@ -59,12 +59,15 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #ifndef __MUSTANG_THREADING_H__
 #define __MUSTANG_THREADING_H__
 
-#include "hashtable.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
 #include <config/config.h>
 #include <mdal/mdal.h>
+#include "hashtable.h"
+#include "retcode_ll.h"
+
+extern void* thread_main(void* args);
 
 typedef struct thread_args_struct thread_args;
 
@@ -104,18 +107,23 @@ thread_args* threadarg_init(marfs_config* shared_config, marfs_position* shared_
         pthread_mutex_t* new_ht_lock, char* new_basepath, int new_fd, 
         FILE* new_logfile, pthread_mutex_t* new_log_lock);
 
-/**
- * "fork" a thread's arguments in preparation for the creation of a new thread
- * which will traverse a layer below the caller thread in the directory 
- * hierarchy. Technically a misnomer since fork(2) is never called; this
- * function merely duplicates most of the current's threads arguments to set
- * up shared state with a new thread.
+/** 
+ * Given a thread's arguments and new inputs for thread marfs_position and
+ * basepath, create a new argument struct for a new thread, then create a new 
+ * thread and record struct allocation/thread creation results accordingly.
+ *
+ * Returns: 
+ * - RETCODE_FLAGS indicating whether argument struct allocation or 
+ *   thread creation failed. 
+ * - thread_id "by reference": pthread_create called on thread_id such that, if
+ *   RETCODE_FLAGS == RETCODE_SUCCESS, *thread_id contains a valid pthread_t on 
+ *   return which may be joined.
  */
-thread_args* threadarg_fork(thread_args* existing, marfs_position* new_position, char* new_basepath);
+RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_position* new_position, char* new_basepath);
 
 /**
  * Destroy a thread's arguments at the conclusion of a thread's run. This must
- * be called after threadarg_fork() is called for all applicable new threads 
+ * be called after mustang_spawn() is called for all applicable new threads 
  * which will traverse encountered subdirectories.
  */
 void threadarg_destroy(thread_args* args);

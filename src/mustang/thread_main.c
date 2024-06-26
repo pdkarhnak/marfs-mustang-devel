@@ -82,7 +82,7 @@ void* thread_main(void* args) {
 
     thread_args* this_args = (thread_args*) args;
 
-    retcode* this_retcode = node_init(this_args->basepath, SUCCESS);
+    retcode* this_retcode = node_init(this_args->basepath, RETCODE_SUCCESS);
     retcode_ll* this_ll = retcode_ll_init();
 
     if ((this_retcode) == NULL || (this_ll == NULL)) {
@@ -124,6 +124,25 @@ void* thread_main(void* args) {
 
     if (thread_position->depth == 0) {
         // check reference chase for position struct's corresponding namespace (and list of subspaces within namespace)
+        /* thread_position->ns->subnodes */
+        if (thread_position->ns->subnodes) {
+            // TODO: add logic to iterate through threads
+            for (size_t subnode_index = 0; subnode_index < ns->subnodecount; subnode_index += 1) {
+                marfs_position* child_ns_position = (marfs_position*) calloc(1, sizeof(marfs_position));
+
+                if (config_duplicateposition(thread_position, child_ns_position)) {
+                    // TODO: clean up and continue
+                }
+                
+                char* child_ns_path = (char*) calloc(PATH_MAX, sizeof(char));
+                if (config_traverse(this_thread->base_config, child_ns_position, &child_ns_path, 0)) {
+                    // TODO: log, clean up, and continue
+                }
+
+                // fork args
+                // spin up new thread
+            }
+        }
     }
 
     // "Regular" readdir logic
@@ -158,8 +177,11 @@ void* thread_main(void* args) {
             char* new_basepath = strdup(current_entry->d_name);
 
             // TODO: verify alternating usage of new_basepath and current_entry->d_name "directly" here
-            // TODO: check new_depth value against < 0 here (**must** be done in parent)
             int new_depth = config_traverse(this_args->base_config, child_position, &new_basepath, 0);
+
+            if (new_depth < 0) {
+                // TODO: log, clean up, and continue
+            }
             
             MDAL_DHANDLE next_cwd_handle = thread_mdal->opendir(child_position->ctxt, current_entry->d_name);
 
@@ -169,31 +191,23 @@ void* thread_main(void* args) {
 
             child_position->depth = new_depth;
 
-            thread_args* next_args = threadarg_fork(this_args, child_position, new_basepath);
-
-            if (next_args == NULL) {
-                this_retcode->flags |= THREADARG_FORK_FAILED;
-                current_entry = thread_mdal->readdir(cwd_handle);
-                continue;
-            }
-
             pthread_t next_id;
-            int createcode = pthread_create(&next_id, NULL, &thread_main, (void*) next_args);
+            RETCODE_FLAGS spawn_flags = mustang_spawn(this_args, &next_id, child_position, new_basepath);
 
-            if (createcode != 0) {
-                // Not strictly fail-deadly for this thread (just new thread(s) will not be spawned)
-                this_retcode->flags |= PTHREAD_CREATE_FAILED;
-            } else {
+            if (spawn_flags != RETCODE_SUCCESS) {
+                this_retcode->flags |= spawn_flags;
+            } else (spawn_flags == RETCODE_SUCCESS) {
                 pthread_vector_append(spawned_threads, next_id);
-            } 
 #ifdef DEBUG
-            if (createcode == 0) {
-                pthread_mutex_lock(this_args->stdout_lock);
-                printf("[thread %0lx]: forked new thread (ID: %0lx) at basepath %s\n", 
-                        SHORT_ID(), (next_id & 0xFFFFFFFF), current_entry->d_name);
-                pthread_mutex_unlock(this_args->stdout_lock);
-            }
+                if (createcode == 0) {
+                    pthread_mutex_lock(this_args->stdout_lock);
+                    printf("[thread %0lx]: forked new thread (ID: %0lx) at basepath %s\n", 
+                            SHORT_ID(), (next_id & 0xFFFFFFFF), current_entry->d_name);
+                    pthread_mutex_unlock(this_args->stdout_lock);
+                }
 #endif
+            }
+
 
         } else if (current_entry->d_type == DT_REG) {
 #ifdef DEBUG

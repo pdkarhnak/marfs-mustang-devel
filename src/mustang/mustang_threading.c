@@ -99,20 +99,20 @@ thread_args* threadarg_init(marfs_config* shared_config, marfs_position* shared_
     return new_args;
 }
 
-thread_args* threadarg_fork(thread_args* existing, marfs_position* new_position, char* new_basepath) {
+RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_position* new_position, char* new_basepath) {
+    RETCODE_FLAGS flags = RETCODE_SUCCESS;
+
     thread_args* new_args = (thread_args*) calloc(1, sizeof(thread_args));
 
     if ((new_args == NULL) || (errno == ENOMEM)) {
-        return NULL;
+        flags |= ALLOC_FAILED;
+        return flags;
     }
 
     new_args->base_config = existing->base_config;
     new_args->base_position = new_position;
-
     new_args->hashtable = existing->hashtable;
     new_args->hashtable_lock = existing->hashtable_lock;
-
-    // TODO: (eventually) add in logic to dup/init new marfs_config and marfs_position for new thread
 
     new_args->basepath = new_basepath;
     new_args->log_ptr = existing->log_ptr;
@@ -122,7 +122,13 @@ thread_args* threadarg_fork(thread_args* existing, marfs_position* new_position,
     new_args->stdout_lock = existing->stdout_lock;
 #endif
 
-    return new_args;
+    int createcode = pthread_create(thread_id, NULL, &thread_main, (void*) new_args);
+
+    if (createcode != 0) {
+        flags |= PTHREAD_CREATE_FAILED;
+    }
+
+    return flags;
 }
 
 void threadarg_destroy(thread_args* args) {
