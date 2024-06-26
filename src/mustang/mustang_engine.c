@@ -28,7 +28,7 @@
     printf("[thread %0lx -- parent] WARNING: %s\n", pthread_self(), message)
 
 #define ERR(message, errorcode) \
-    printf("ERROR: %s (%s)\n", message, strerror(errorcode));
+    printf("ERROR: %s (%s)", message, strerror(errorcode));
 
 #define ERR_MSG(message) \
     printf("[thread %0lx -- parent] ERROR: %s\n", pthread_self(), message)
@@ -58,7 +58,8 @@ int main(int argc, char** argv) {
     hashtable* output_table = hashtable_init();
     
     if ((output_table == NULL) || (errno == ENOMEM)) {
-        ERR("No memory left--failed to allocate hashtable.", errno)
+        ERR("No memory left--failed to allocate hashtable.", errno);
+        printf("\n");
         return 1;
     }
 
@@ -90,22 +91,42 @@ int main(int argc, char** argv) {
         ERR_MSG("Failed to establish marfs_position!");
         return 1;
     }
+
+    if (config_fortifyposition(&parent_position)) {
+        ERR_MSG("Failed to fortify position with MDAL_CTXT!");
+        config_abandonposition(&parent_position);
+        return 1;
+    }
+
+    MDAL parent_mdal = parent_position.ns->prepo->metascheme.mdal;
     
     for (int index = 4; index < argc; index += 1) {
-
-        int next_cwd_fd = open(argv[index], O_RDONLY | O_DIRECTORY);
+        marfs_position* child_position = calloc(1, sizeof(marfs_position));
         char* next_basepath = strndup(argv[index], strlen(argv[index]));
 
-#ifdef DEBUG
-        if (next_cwd_fd == -1) {
-            pthread_mutex_lock(&out_lock);
-            printf("ERROR: open() failed! (%s)\n", strerror(errno));
-            pthread_mutex_unlock(&out_lock);
-            return 1;
-        }
-#endif
+        int child_depth = config_traverse(parent_config, child_position, &next_basepath, 0);
 
-        thread_args* topdir_args = threadarg_init(parent_config, &parent_position, output_table, &ht_lock, next_basepath, next_cwd_fd, logfile_ptr, &logfile_lock);
+        if (child_depth < 0) {
+            free(next_basepath);
+            config_abandonposition(child_position);
+            continue;
+        }
+
+        MDAL_DHANDLE child_dirhandle = parent_mdal->opendir(child_position->ctxt, argv[index]);
+
+        if (child_dirhandle == NULL) {
+            ERR("Failed to open target directory/namespace", errno);
+            printf("[target: %s]\n", argv[index]);
+        }
+
+        if (parent_mdal->chdir(child_position->ctxt, child_dirhandle)) {
+            ERR("Failed to chdir into target directory", errno);
+            printf("[target: %s]\n", argv[index]);
+        }
+
+        child_position->depth = child_depth;
+
+        thread_args* topdir_args = threadarg_init(parent_config, &parent_position, output_table, &ht_lock, next_basepath, logfile_ptr, &logfile_lock);
 
 #ifdef DEBUG
         topdir_args->stdout_lock = &out_lock;        

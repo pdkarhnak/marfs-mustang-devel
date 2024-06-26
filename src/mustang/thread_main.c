@@ -79,6 +79,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #endif
 
 void* thread_main(void* args) {
+    errno = 0;
 
     thread_args* this_args = (thread_args*) args;
 
@@ -102,7 +103,7 @@ void* thread_main(void* args) {
 
     // Define a convenient alias for this thread's relevant MDAL, from which 
     // all metadata ops will be launched
-    MDAL thread_mdal = thread_position->ns->prepo.metascheme.mdal;
+    MDAL thread_mdal = thread_position->ns->prepo->metascheme.mdal;
 
     // Recover a directory handle for the cwd to enable later readdir()
     MDAL_DHANDLE cwd_handle = thread_mdal->opendir(thread_position->ctxt, ".");
@@ -126,21 +127,29 @@ void* thread_main(void* args) {
         // check reference chase for position struct's corresponding namespace (and list of subspaces within namespace)
         /* thread_position->ns->subnodes */
         if (thread_position->ns->subnodes) {
-            // TODO: add logic to iterate through threads
-            for (size_t subnode_index = 0; subnode_index < ns->subnodecount; subnode_index += 1) {
+            for (size_t subnode_index = 0; subnode_index < thread_position->ns->subnodecount; subnode_index += 1) {
+                HASH_NODE current_subnode = (thread_position->ns->subnodes)[subnode_index];
+
                 marfs_position* child_ns_position = (marfs_position*) calloc(1, sizeof(marfs_position));
 
                 if (config_duplicateposition(thread_position, child_ns_position)) {
                     // TODO: clean up and continue
                 }
                 
-                char* child_ns_path = (char*) calloc(PATH_MAX, sizeof(char));
-                if (config_traverse(this_thread->base_config, child_ns_position, &child_ns_path, 0)) {
+                char* child_ns_path = strdup(current_subnode.name);
+                if (config_traverse(this_args->base_config, child_ns_position, &child_ns_path, 0)) {
                     // TODO: log, clean up, and continue
+                    free(child_ns_path);
+                    config_abandonposition(child_ns_position);
+                    continue;
                 }
 
-                // fork args
-                // spin up new thread
+                pthread_t next_ns_thread;
+                RETCODE_FLAGS ns_spawn_flags = mustang_spawn(this_args, &next_ns_thread, child_ns_position, child_ns_path);
+
+                if (ns_spawn_flags != RETCODE_SUCCESS) {
+                    this_retcode->flags |= ns_spawn_flags;
+                }
             }
         }
     }
@@ -196,15 +205,13 @@ void* thread_main(void* args) {
 
             if (spawn_flags != RETCODE_SUCCESS) {
                 this_retcode->flags |= spawn_flags;
-            } else (spawn_flags == RETCODE_SUCCESS) {
+            } else {
                 pthread_vector_append(spawned_threads, next_id);
 #ifdef DEBUG
-                if (createcode == 0) {
-                    pthread_mutex_lock(this_args->stdout_lock);
-                    printf("[thread %0lx]: forked new thread (ID: %0lx) at basepath %s\n", 
-                            SHORT_ID(), (next_id & 0xFFFFFFFF), current_entry->d_name);
-                    pthread_mutex_unlock(this_args->stdout_lock);
-                }
+                pthread_mutex_lock(this_args->stdout_lock);
+                printf("[thread %0lx]: forked new thread (ID: %0lx) at basepath %s\n", 
+                        SHORT_ID(), (next_id & 0xFFFFFFFF), current_entry->d_name);
+                pthread_mutex_unlock(this_args->stdout_lock);
 #endif
             }
 
@@ -216,7 +223,7 @@ void* thread_main(void* args) {
             pthread_mutex_unlock(this_args->stdout_lock);
 #endif
 
-            file_ftagstr = get_ftag(&local_position, thread_mdal, current_entry->d_name);
+            file_ftagstr = get_ftag(thread_position, thread_mdal, current_entry->d_name);
             FTAG retrieved_tag = {0};
             
             if (ftag_initstr(&retrieved_tag, file_ftagstr)) {
@@ -236,7 +243,7 @@ void* thread_main(void* args) {
             // TODO: implement namecache optimization at some point
             for (size_t i = objno_min; i <= objno_max; i += 1) {
                 retrieved_tag.objno = i;
-                if (datastream_objtarget(&retrieved_tag, thread_position->ns->prepo->datascheme, &retrieved_id, &placeholder_erasure, &placeholder_location)) {
+                if (datastream_objtarget(&retrieved_tag, &(thread_position->ns->prepo->datascheme), &retrieved_id, &placeholder_erasure, &placeholder_location)) {
 
                     // TODO: clean up this iteration, readdir, and continue
                 }

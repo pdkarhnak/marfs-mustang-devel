@@ -83,7 +83,8 @@ typedef enum {
     TRAVERSE_FAILED =           0x100,
     CLOSEDIR_FAILED =           0x200,
     ABANDONPOS_FAILED =         0x400,
-    FORTIFYPOS_FAILED =         0x800
+    FORTIFYPOS_FAILED =         0x800,
+    FTAG_INIT_FAILED =          0x1000
 } RETCODE_FLAGS;
 
 typedef struct retcode_struct retcode;

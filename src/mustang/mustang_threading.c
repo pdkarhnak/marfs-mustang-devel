@@ -126,6 +126,8 @@ RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_p
 
     if (createcode != 0) {
         flags |= PTHREAD_CREATE_FAILED;
+        free(new_args->basepath);
+        threadarg_destroy(existing);
     }
 
     return flags;
@@ -141,7 +143,7 @@ void threadarg_destroy(thread_args* args) {
 
 char* get_ftag(marfs_position* current_position, MDAL current_mdal, char* path) {
     MDAL_FHANDLE target_handle = current_mdal->open(current_position->ctxt, path, O_RDONLY);
-    if (handle == NULL) {
+    if (target_handle == NULL) {
         return NULL;
     }
 
@@ -163,7 +165,7 @@ char* get_ftag(marfs_position* current_position, MDAL current_mdal, char* path) 
         return NULL; 
     }
 
-    if (current_mdal->fgetxattr(target_handle, 1, FTAG_NAME, ftagstr, ftag_len) != ftag_len) {
+    if (current_mdal->fgetxattr(target_handle, 1, FTAG_NAME, ftag_str, ftag_len) != ftag_len) {
         current_mdal->close(target_handle);
         free(ftag_str);
         errno = ESTALE;
