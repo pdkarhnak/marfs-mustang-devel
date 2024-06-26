@@ -77,8 +77,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #endif
 
 thread_args* threadarg_init(marfs_config* shared_config, marfs_position* shared_position, hashtable* new_hashtable, 
-        pthread_mutex_t* new_ht_lock, char* new_basepath, int new_fd, 
-        FILE* new_logfile, pthread_mutex_t* new_log_lock) {
+        pthread_mutex_t* new_ht_lock, char* new_basepath, FILE* new_logfile, pthread_mutex_t* new_log_lock) {
     thread_args* new_args = (thread_args*) calloc(1, sizeof(thread_args));
 
     if ((new_args == NULL) || (errno == ENOMEM)) {
@@ -90,7 +89,6 @@ thread_args* threadarg_init(marfs_config* shared_config, marfs_position* shared_
     new_args->hashtable = new_hashtable;
     new_args->hashtable_lock = new_ht_lock;
     new_args->basepath = new_basepath;
-    new_args->cwd_fd = new_fd;
     new_args->log_ptr = new_logfile;
     new_args->log_lock = new_log_lock;
 
@@ -101,15 +99,15 @@ thread_args* threadarg_init(marfs_config* shared_config, marfs_position* shared_
     return new_args;
 }
 
-thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_fd) {
+thread_args* threadarg_fork(thread_args* existing, marfs_position* new_position, char* new_basepath) {
     thread_args* new_args = (thread_args*) calloc(1, sizeof(thread_args));
 
     if ((new_args == NULL) || (errno == ENOMEM)) {
         return NULL;
     }
 
-    new_args->thread_config = existing->thread_config;
-    new_args->thread_position = existing->thread_position;
+    new_args->base_config = existing->base_config;
+    new_args->base_position = new_position;
 
     new_args->hashtable = existing->hashtable;
     new_args->hashtable_lock = existing->hashtable_lock;
@@ -117,7 +115,6 @@ thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_f
     // TODO: (eventually) add in logic to dup/init new marfs_config and marfs_position for new thread
 
     new_args->basepath = new_basepath;
-    new_args->cwd_fd = new_fd;
     new_args->log_ptr = existing->log_ptr;
     new_args->log_lock = existing->log_lock;
 
@@ -129,7 +126,8 @@ thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_f
 }
 
 void threadarg_destroy(thread_args* args) {
-    config_abandonposition(args->thread_position);
+    config_abandonposition(args->base_position);
+    args->base_config = NULL;
     args->basepath = NULL;
     args->log_ptr = NULL;
     free(args);

@@ -83,9 +83,6 @@ typedef struct thread_args_struct {
     // thread opens.
     char* basepath; 
 
-    // Parent-created file descriptor to properly isolate child's new cwd
-    int cwd_fd;
-
     FILE* log_ptr;
     pthread_mutex_t* log_lock;
 
@@ -114,7 +111,7 @@ thread_args* threadarg_init(marfs_config* shared_config, marfs_position* shared_
  * function merely duplicates most of the current's threads arguments to set
  * up shared state with a new thread.
  */
-thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_fd);
+thread_args* threadarg_fork(thread_args* existing, marfs_position* new_position, char* new_basepath);
 
 /**
  * Destroy a thread's arguments at the conclusion of a thread's run. This must
@@ -123,7 +120,6 @@ thread_args* threadarg_fork(thread_args* existing, char* new_basepath, int new_f
  */
 void threadarg_destroy(thread_args* args);
 
-// TODO: add ftag getter utility?
 char* get_ftag(marfs_position* current_position, MDAL current_mdal, char* path);
 
 #endif

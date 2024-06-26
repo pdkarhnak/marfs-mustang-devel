@@ -90,17 +90,47 @@ void* thread_main(void* args) {
         return NULL; // Will be interpreted as flag CHILD_ALLOC_FAILED
     }
 
+    marfs_position* thread_position = this_args->base_position;
+
+    // Attempt to fortify the thread's position (if not already fortified) and check for errors
+    if ((thread_position->ctxt == NULL) && config_fortifyposition(thread_position)) {
+        this_retcode->flags |= FORTIFYPOS_FAILED;
+        retcode_ll_add(this_ll, this_retcode);
+        threadarg_destroy(this_args);
+        return (void*) this_ll;
+    }
+
+    // Define a convenient alias for this thread's relevant MDAL, from which 
+    // all metadata ops will be launched
+    MDAL thread_mdal = thread_position->ns->prepo.metascheme.mdal;
+
+    // Recover a directory handle for the cwd to enable later readdir()
+    MDAL_DHANDLE cwd_handle = thread_mdal->opendir(thread_position->ctxt, ".");
+
+    if (cwd_handle == NULL) {
+        // TODO: log and continue/set some internal flag to skip readdir() calls after namespace checks
+    }
+
     pthread_vector* spawned_threads = pthread_vector_init(DEFAULT_CAPACITY);
 
     if (spawned_threads == NULL) {
         this_retcode->flags |= ALLOC_FAILED;
         retcode_ll_add(this_ll, this_retcode);
-        closedir(cwd_handle);
         threadarg_destroy(this_args);
         return (void*) this_ll;
     }
 
+    // TODO: add namespace checks
+
+    if (thread_position->depth == 0) {
+        // check reference chase for position struct's corresponding namespace (and list of subspaces within namespace)
+    }
+
+    // "Regular" readdir logic
     struct dirent* current_entry = thread_mdal->readdir(cwd_handle);
+
+    char* file_ftagstr = NULL;
+    char* retrieved_id = NULL;
 
     while (current_entry != NULL) {
         if (current_entry->d_type == DT_DIR) {
@@ -111,20 +141,38 @@ void* thread_main(void* args) {
                 continue;
             }
 
-            // TODO: swap out openat() call for thread_mdal->opendir() call or similar
-            int next_cwd_fd = openat(this_args->cwd_fd, current_entry->d_name, O_RDONLY | O_DIRECTORY);
-
-            if (next_cwd_fd == -1) {
-                this_retcode->flags |= NEW_DIRFD_OPEN_FAILED;
+            marfs_position* child_position = (marfs_position*) calloc(1, sizeof(marfs_position));
+            if (child_position == NULL) {
+                this_retcode->flags |= ALLOC_FAILED;
+                // add cleanup logic: close dir handle, etc.
                 current_entry = thread_mdal->readdir(cwd_handle);
                 continue;
             }
 
-            thread_args* next_args = threadarg_fork(this_args, strndup(current_entry->d_name, strlen(current_entry->d_name)), next_cwd_fd);
+            if (config_duplicateposition(thread_position, child_position)) {
+                this_retcode->flags |= DUPPOS_FAILED; // or something like that
+                // add cleanup logic: close dir handle, etc.
+                continue;
+            }
+
+            char* new_basepath = strdup(current_entry->d_name);
+
+            // TODO: verify alternating usage of new_basepath and current_entry->d_name "directly" here
+            // TODO: check new_depth value against < 0 here (**must** be done in parent)
+            int new_depth = config_traverse(this_args->base_config, child_position, &new_basepath, 0);
+            
+            MDAL_DHANDLE next_cwd_handle = thread_mdal->opendir(child_position->ctxt, current_entry->d_name);
+
+            if (thread_mdal->chdir(child_position->ctxt, next_cwd_handle)) {
+                // TODO: log, clean up, and continue
+            }
+
+            child_position->depth = new_depth;
+
+            thread_args* next_args = threadarg_fork(this_args, child_position, new_basepath);
 
             if (next_args == NULL) {
                 this_retcode->flags |= THREADARG_FORK_FAILED;
-                close(next_cwd_fd);
                 current_entry = thread_mdal->readdir(cwd_handle);
                 continue;
             }
@@ -135,7 +183,6 @@ void* thread_main(void* args) {
             if (createcode != 0) {
                 // Not strictly fail-deadly for this thread (just new thread(s) will not be spawned)
                 this_retcode->flags |= PTHREAD_CREATE_FAILED;
-                close(next_cwd_fd);
             } else {
                 pthread_vector_append(spawned_threads, next_id);
             } 
@@ -155,8 +202,7 @@ void* thread_main(void* args) {
             pthread_mutex_unlock(this_args->stdout_lock);
 #endif
 
-            // TODO: add logic to get ftag as str
-            char* file_ftagstr = get_ftag(&local_position, thread_mdal, current_entry->d_name);
+            file_ftagstr = get_ftag(&local_position, thread_mdal, current_entry->d_name);
             FTAG retrieved_tag = {0};
             
             if (ftag_initstr(&retrieved_tag, file_ftagstr)) {
@@ -169,28 +215,40 @@ void* thread_main(void* args) {
             // TODO: calculate object bounds and iterate accordingly
             size_t objno_min = retrieved_tag.objno;
             size_t objno_max = datastream_filebounds(retrieved_tag);
-            char* retrieved_id = (char*) calloc(PATH_MAX, sizeof(char));
+            retrieved_id = (char*) calloc(PATH_MAX, sizeof(char));
             ne_erasure placeholder_erasure;
             ne_location placeholder_location;
 
             // TODO: implement namecache optimization at some point
             for (size_t i = objno_min; i <= objno_max; i += 1) {
                 retrieved_tag.objno = i;
-                if (datastream_objtarget(&retrieved_tag, /* pos->ns->prepo->datascheme */, &retrieved_id, &placeholder_erasure, &placeholder_location)) {
+                if (datastream_objtarget(&retrieved_tag, thread_position->ns->prepo->datascheme, &retrieved_id, &placeholder_erasure, &placeholder_location)) {
+
                     // TODO: clean up this iteration, readdir, and continue
                 }
 
                 pthread_mutex_lock(this_args->hashtable_lock);
                 put(this_args->hashtable, retrieved_id);
                 pthread_mutex_unlock(this_args->hashtable_lock);
+                retrieved_id = memset(retrieved_id, 0, PATH_MAX);
             }
 
+            free(file_ftagstr);
+            free(retrieved_id);
         }
 
-        current_entry = readdir(cwd_handle);
+        current_entry = thread_mdal->readdir(cwd_handle);
     }
 
     /* --- begin join and cleanup --- */
+    if (file_ftagstr != NULL) {
+        free(file_ftagstr);
+    }
+
+    if (retrieved_id != NULL) {
+        free(retrieved_id);
+    }
+
     pthread_t to_join;
 
     for (int thread_index = 0; thread_index < spawned_threads->size; thread_index += 1) {
@@ -222,19 +280,16 @@ void* thread_main(void* args) {
 
     }
 
-    retcode_ll_add(this_ll, this_retcode);
-
-    pthread_vector_destroy(spawned_threads);
-
     if (thread_mdal->closedir(cwd_handle)) {
         this_retcode->flags |= CLOSEDIR_FAILED;
     }
 
-    if (config_abandonposition(&local_position)) {
-        this_retcode->flags |= ABANDONPOS_FAILED;
-    }
+    retcode_ll_add(this_ll, this_retcode);
+
+    pthread_vector_destroy(spawned_threads);
 
     threadarg_destroy(this_args);
+    thread_position = NULL;
 
     return (void*) this_ll;
 
