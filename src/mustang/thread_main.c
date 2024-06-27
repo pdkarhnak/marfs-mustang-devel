@@ -149,6 +149,8 @@ void* thread_main(void* args) {
 
                 if (ns_spawn_flags != RETCODE_SUCCESS) {
                     this_retcode->flags |= ns_spawn_flags;
+                } else {
+                    pthread_vector_append(spawned_threads, next_ns_thread);
                 }
             }
         }
@@ -185,7 +187,6 @@ void* thread_main(void* args) {
 
             char* new_basepath = strdup(current_entry->d_name);
 
-            // TODO: verify alternating usage of new_basepath and current_entry->d_name "directly" here
             int new_depth = config_traverse(this_args->base_config, child_position, &new_basepath, 0);
 
             if (new_depth < 0) {
@@ -236,38 +237,42 @@ void* thread_main(void* args) {
             // TODO: calculate object bounds and iterate accordingly
             size_t objno_min = retrieved_tag.objno;
             size_t objno_max = datastream_filebounds(&retrieved_tag);
-            retrieved_id = (char*) calloc(PATH_MAX, sizeof(char));
             ne_erasure placeholder_erasure;
             ne_location placeholder_location;
 
             // TODO: implement namecache optimization at some point
             for (size_t i = objno_min; i <= objno_max; i += 1) {
                 retrieved_tag.objno = i;
-                if (datastream_objtarget(&retrieved_tag, &(thread_position->ns->prepo->datascheme), &retrieved_id, &placeholder_erasure, &placeholder_location)) {
-
+                if (datastream_objtarget(&retrieved_tag, &(thread_position->ns->prepo->datascheme), &retrieved_id, &placeholder_erasure, &placeholder_location)) { 
                     // TODO: clean up this iteration, readdir, and continue
                 }
 
                 pthread_mutex_lock(this_args->hashtable_lock);
-                put(this_args->hashtable, retrieved_id);
+                put(this_args->hashtable, retrieved_id); // put() dupes string into new heap space
                 pthread_mutex_unlock(this_args->hashtable_lock);
-                retrieved_id = memset(retrieved_id, 0, PATH_MAX);
             }
 
             free(file_ftagstr);
-            free(retrieved_id);
+            file_ftagstr = NULL; // discard stale reference to FTAG to prevent double-free
+            free(retrieved_id); // original string can be freed since data has been separately copied to hashtable
+            retrieved_id = NULL; // make ptr NULL to better discard stale reference
         }
 
         current_entry = thread_mdal->readdir(cwd_handle);
     }
 
     /* --- begin join and cleanup --- */
+
+    // if FTAG cleanup somehow failed, ensure cleanup instead occurs here
     if (file_ftagstr != NULL) {
         free(file_ftagstr);
+        file_ftagstr = NULL;
     }
 
+    // string pointer should have been made null and cleaned up---check that this has occurred
     if (retrieved_id != NULL) {
         free(retrieved_id);
+        retrieved_id = NULL;
     }
 
     pthread_t to_join;
@@ -309,7 +314,12 @@ void* thread_main(void* args) {
 
     pthread_vector_destroy(spawned_threads);
 
-    threadarg_destroy(this_args);
+    config_abandonposition(args->base_position);
+    this_args->base_config = NULL;
+    this_args->basepath = NULL;
+    this_args->log_ptr = NULL;
+    this_free(args);
+
     thread_position = NULL;
 
     return (void*) this_ll;
