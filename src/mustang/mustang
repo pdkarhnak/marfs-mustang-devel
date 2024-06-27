@@ -11,7 +11,6 @@ default_filename = f"mustang-output-{startup_timestamp.year}{startup_timestamp.m
 default_logname = f"mustang-run-{startup_timestamp.year}{startup_timestamp.month}{startup_timestamp.day}-{startup_timestamp.hour}-{startup_timestamp.minute}-{startup_timestamp.second}.log"
 
 parser = argparse.ArgumentParser(prog='./mustang.py', description='Parse command-line arguments as a wrapper for the MUSTANG binary.')
-        help='The maximum number of threads this program allows to simultaneously run before stalling the creation of new threads (default: %(default)s).')
 parser.add_argument("-p", "--paths", required=True, nargs='+', metavar='PATH', 
         help='One or more POSIX-like paths to recursively traverse within a MarFS instance and catalog objects along.')
 parser.add_argument("-o", "--output", required=False, type=str, nargs='?', default=default_filename, metavar="FILE", 

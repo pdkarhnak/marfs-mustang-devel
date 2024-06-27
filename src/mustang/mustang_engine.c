@@ -37,7 +37,7 @@ extern void* thread_main(void* args);
 
 int main(int argc, char** argv) {
 
-    if (argc < 4) {
+    if (argc < 3) {
         printf("USAGE: ./mustang-engine [output file] [log file] [max threads] [paths, ...]\n");
         printf("\tHINT: see mustang wrapper or invoke \"mustang -h\" for more details.\n");
         return 1;
@@ -99,28 +99,50 @@ int main(int argc, char** argv) {
     MDAL parent_mdal = parent_position.ns->prepo->metascheme.mdal;
     
     for (int index = 3; index < argc; index += 1) {
+#ifdef DEBUG
+        printf("NOTE: processing arg \"%s\"\n", argv[index]);
+#endif
+
         marfs_position* child_position = calloc(1, sizeof(marfs_position));
+
+        if (config_duplicateposition(&parent_position, child_position)) {
+            ERR_MSG("Failed to duplicate parent position to child!");
+        }
+
         char* next_basepath = strndup(argv[index], strlen(argv[index]));
 
         int child_depth = config_traverse(parent_config, child_position, &next_basepath, 0);
 
+        if (config_fortifyposition(child_position)) {
+            ERR_MSG("Failed to fortify child position after child traverse!");
+        }
+
         if (child_depth < 0) {
+            ERR_MSG("Failed to traverse! ");
+            printf("(got depth %d)\n", child_depth);
             free(next_basepath);
             config_abandonposition(child_position);
             continue;
         }
 
-        MDAL_DHANDLE child_dirhandle = parent_mdal->opendir(child_position->ctxt, argv[index]);
+        MDAL current_child_mdal = child_position->ns->prepo->metascheme.mdal;
+
+        MDAL_DHANDLE child_dirhandle = current_child_mdal->opendir(child_position->ctxt, argv[index]);
+
+        if (child_dirhandle == NULL) {
+            child_dirhandle = parent_mdal->opendirnamespace(child_position->ctxt, argv[index]);
+        }
 
         if (child_dirhandle == NULL) {
             ERR("Failed to open target directory/namespace", errno);
-            printf("[target: %s]\n", argv[index]);
+            printf(" [target: %s]\n", argv[index]);
         }
 
-        if (parent_mdal->chdir(child_position->ctxt, child_dirhandle)) {
+        if (current_child_mdal->chdir(child_position->ctxt, child_dirhandle)) {
             ERR("Failed to chdir into target directory", errno);
-            printf("[target: %s]\n", argv[index]);
+            printf(" [target: %s]\n", argv[index]);
         }
+
 
         child_position->depth = child_depth;
 

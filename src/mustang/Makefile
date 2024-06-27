@@ -5,7 +5,7 @@ MARFS_SRC_INCLUDE := -I/$(MARFS_INSTALL_PATH)/marfs/src/
 INCLUDE_XML := -I/usr/include/libxml2/
 MARFS_GENERAL_INCLUDE := $(MARFS_SRC_INCLUDE) $(INCLUDE_XML)
 CFLAGS := -Wall -pedantic -O2 -g -DDEBUG
-LDFLAGS := #-fsanitize=address
+LDFLAGS := 
 MARFS_LDFLAGS := -L$(MARFS_INSTALL_PATH)/lib
 LDLIBS := -lpthread
 
