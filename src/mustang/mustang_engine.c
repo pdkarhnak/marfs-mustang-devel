@@ -125,12 +125,14 @@ int main(int argc, char** argv) {
             continue;
         }
 
+        MDAL_DHANDLE child_dirhandle;
+
         MDAL current_child_mdal = child_position->ns->prepo->metascheme.mdal;
 
-        MDAL_DHANDLE child_dirhandle = current_child_mdal->opendir(child_position->ctxt, argv[index]);
-
-        if (child_dirhandle == NULL) {
+        if (child_depth == 0) {
             child_dirhandle = parent_mdal->opendirnamespace(child_position->ctxt, argv[index]);
+        } else {
+            child_dirhandle = current_child_mdal->opendir(child_position->ctxt, argv[index]);
         }
 
         if (child_dirhandle == NULL) {
