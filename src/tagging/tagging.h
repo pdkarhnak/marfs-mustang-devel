@@ -212,6 +212,13 @@ ssize_t ftag_metainfo( const char* fileid, char* entrytype );
  */
 size_t ftag_datatgt( const FTAG* ftag, char* tgtstr, size_t len );
 
+/**
+ * Free allocated memory for internal ctag and streamid fields within an ftag.
+ * NOTE: this function does not free the ftag itself since this function cannot
+ * make assumptions about whether an ftag is heap-allocated or on the stack.
+ * @param FTAG* ftag: the ftag whose ctag and streamid fields will be freed.
+ */
+void ftag_cleanup(FTAG* ftag);
 
 // MARFS REBUILD TAG  --  attached to rebuild marker files, providing rebuild info
 
