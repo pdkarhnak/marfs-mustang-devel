@@ -57,10 +57,9 @@ int main(int argc, char** argv) {
     pthread_mutex_t ht_lock = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_t logfile_lock = PTHREAD_MUTEX_INITIALIZER;
 
-#ifdef DEBUG
+    // For debugging
     pthread_mutex_t out_lock;
     pthread_mutex_init(&out_lock, NULL);
-#endif
 
     pthread_vector* top_threads = pthread_vector_init(DEFAULT_CAPACITY);
 
@@ -90,9 +89,7 @@ int main(int argc, char** argv) {
     MDAL parent_mdal = parent_position.ns->prepo->metascheme.mdal;
     
     for (int index = 3; index < argc; index += 1) {
-#ifdef DEBUG
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
-#endif
 
         marfs_position* child_position = calloc(1, sizeof(marfs_position));
 
@@ -138,19 +135,15 @@ int main(int argc, char** argv) {
 
         thread_args* topdir_args = threadarg_init(parent_config, child_position, output_table, &ht_lock, next_basepath, logfile_ptr, &logfile_lock);
 
-#ifdef DEBUG
         topdir_args->stdout_lock = &out_lock;        
-#endif
 
         pthread_t next_id;
         pthread_create(&next_id, NULL, &thread_main, (void*) topdir_args);
         pthread_vector_append(top_threads, next_id);
 
-#ifdef DEBUG
         pthread_mutex_lock(&out_lock);
-        printf("[thread %0lx -- parent]: created top thread with ID: %0lx and target basepath: '%s'\n", SHORT_SELFID(), SHORT_ID(next_id), next_basepath);
+        LOG(LOG_INFO, "Created top-level thread with ID: %0lx and basepath \"%s\"\n", next_id, next_basepath);
         pthread_mutex_unlock(&out_lock);
-#endif
 
     }
  
@@ -171,21 +164,17 @@ int main(int argc, char** argv) {
         int joincode = pthread_join(join_id, (void**) &joined_ll);
 
         if (joincode != 0) {
-#ifdef DEBUG
             pthread_mutex_lock(&out_lock);
             LOG(LOG_ERR, "Failed to join child thread (child ID: %0lx)\n", join_id);
             pthread_mutex_unlock(&out_lock);
-#endif
             continue;
         }
 
         if (joined_ll == NULL) {
-#ifdef DEBUG
             pthread_mutex_lock(&out_lock);
             LOG(LOG_ERR, "Child thread (ID: %0lx) returned NULL -- was unable to allocte memory.\n", join_id);
             pthread_mutex_unlock(&out_lock);
             continue;
-#endif
         }
 
         parent_ll = retcode_ll_concat(parent_ll, joined_ll);
@@ -199,9 +188,7 @@ int main(int argc, char** argv) {
     retcode_ll_flush(parent_ll, logfile_ptr, &logfile_lock);
     retcode_ll_destroy(parent_ll);
 
-#ifdef DEBUG
     pthread_mutex_destroy(&out_lock);
-#endif
 
     pthread_mutex_lock(&ht_lock);
     hashtable_dump(output_table, output_ptr);

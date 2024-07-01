@@ -89,9 +89,7 @@ typedef struct thread_args_struct {
     FILE* log_ptr;
     pthread_mutex_t* log_lock;
 
-#ifdef DEBUG
     pthread_mutex_t* stdout_lock;
-#endif
 
 } thread_args;
 

@@ -69,13 +69,6 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #define ENOATTR ENODATA
 #endif
 
-#ifdef DEBUG
-#include <stdio.h>
-#include <assert.h>
-#define ID_MASK 0xFFFFFFFF
-#define SHORT_ID() (pthread_self() & ID_MASK)
-#endif
-
 thread_args* threadarg_init(marfs_config* shared_config, marfs_position* shared_position, hashtable* new_hashtable, 
         pthread_mutex_t* new_ht_lock, char* new_basepath, FILE* new_logfile, pthread_mutex_t* new_log_lock) {
     thread_args* new_args = (thread_args*) calloc(1, sizeof(thread_args));
@@ -91,10 +84,7 @@ thread_args* threadarg_init(marfs_config* shared_config, marfs_position* shared_
     new_args->basepath = new_basepath;
     new_args->log_ptr = new_logfile;
     new_args->log_lock = new_log_lock;
-
-#ifdef DEBUG
     new_args->stdout_lock = NULL;
-#endif
 
     return new_args;
 }
