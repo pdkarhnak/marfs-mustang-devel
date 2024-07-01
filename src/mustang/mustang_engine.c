@@ -9,6 +9,9 @@
 #include <config/config.h>
 #include <datastream/datastream.h>
 
+#define LOG_PREFIX "mustang_engine"
+#include <logging/logging.h>
+
 #ifdef DEBUG
 #include <assert.h>
 #define ID_MASK 0xFFFFFFFF
@@ -20,18 +23,6 @@
 #include "mustang_threading.h"
 #include "pthread_vector.h"
 #include "retcode_ll.h"
-
-#define WARN(message, errorcode) \
-    printf("WARNING: %s (%s)\n", message, strerror(errorcode));
-
-#define WARN_MSG(message) \
-    printf("[thread %0lx -- parent] WARNING: %s\n", pthread_self(), message)
-
-#define ERR(message, errorcode) \
-    printf("ERROR: %s (%s)", message, strerror(errorcode));
-
-#define ERR_MSG(message) \
-    printf("[thread %0lx -- parent] ERROR: %s\n", pthread_self(), message)
 
 extern void* thread_main(void* args);
 
@@ -47,19 +38,19 @@ int main(int argc, char** argv) {
     FILE* logfile_ptr = fopen(argv[2], "w");
 
     if (output_ptr == NULL) {
-        printf("ERROR: failed to open file \"%s\"\n", argv[1]);
+        LOG(LOG_ERR, "Failed to open file \"%s\" for writing to output\n", argv[1]);
         return 1;
     }
 
     if (logfile_ptr == NULL) {
-        printf("ERROR: failed to open file \"%s\"\n", argv[2]);
+        LOG(LOG_ERR, "Failed to open file \"%s\" for logging\n", argv[2]);
+        return 1;
     }
 
     hashtable* output_table = hashtable_init();
     
     if ((output_table == NULL) || (errno == ENOMEM)) {
-        ERR("No memory left--failed to allocate hashtable.", errno);
-        printf("\n");
+        LOG(LOG_ERR, "Failed to initialize hashtable (%s)\n", strerror(errno));
         return 1;
     }
 
@@ -76,7 +67,7 @@ int main(int argc, char** argv) {
     char* config_path = getenv("MARFS_CONFIG_PATH");
 
     if (config_path == NULL) {
-        ERR_MSG("MARFS_CONFIG_PATH not set in environment--please set and try again.");
+        LOG(LOG_ERR, "MARFS_CONFIG_PATH not set in environment--please set and try again.");
         return 1;
     }
 
@@ -86,12 +77,12 @@ int main(int argc, char** argv) {
     marfs_position parent_position = { .ns = NULL, .depth = 0, .ctxt = NULL };
 
     if (config_establishposition(&parent_position, parent_config)) {
-        ERR_MSG("Failed to establish marfs_position!");
+        LOG(LOG_ERR, "Failed to establish marfs_position!\n");
         return 1;
     }
 
     if (config_fortifyposition(&parent_position)) {
-        ERR_MSG("Failed to fortify position with MDAL_CTXT!");
+        LOG(LOG_ERR, "Failed to fortify position with MDAL_CTXT!\n");
         config_abandonposition(&parent_position);
         return 1;
     }
@@ -100,13 +91,13 @@ int main(int argc, char** argv) {
     
     for (int index = 3; index < argc; index += 1) {
 #ifdef DEBUG
-        printf("NOTE: processing arg \"%s\"\n", argv[index]);
+        LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
 #endif
 
         marfs_position* child_position = calloc(1, sizeof(marfs_position));
 
         if (config_duplicateposition(&parent_position, child_position)) {
-            ERR_MSG("Failed to duplicate parent position to child!");
+            LOG(LOG_ERR, "Failed to duplicate parent position to child!\n");
         }
 
         char* next_basepath = strndup(argv[index], strlen(argv[index]));
@@ -114,12 +105,11 @@ int main(int argc, char** argv) {
         int child_depth = config_traverse(parent_config, child_position, &next_basepath, 0);
 
         if (config_fortifyposition(child_position)) {
-            ERR_MSG("Failed to fortify child position after child traverse!");
+            LOG(LOG_ERR, "Failed to fortify child position after child traverse!\n");
         }
 
         if (child_depth < 0) {
-            ERR_MSG("Failed to traverse! ");
-            printf("(got depth %d)\n", child_depth);
+            LOG(LOG_ERR, "Failed to traverse (got depth: %d\n)", child_depth);
             free(next_basepath);
             config_abandonposition(child_position);
             continue;
@@ -136,13 +126,11 @@ int main(int argc, char** argv) {
         }
 
         if (child_dirhandle == NULL) {
-            ERR("Failed to open target directory/namespace", errno);
-            printf(" [target: %s]\n", argv[index]);
+            LOG(LOG_ERR, "Failed to open target directory/namespace \"%s\" (%s) (target was: %s)\n", argv[index], strerror(errno));
         }
 
         if (current_child_mdal->chdir(child_position->ctxt, child_dirhandle)) {
-            ERR("Failed to chdir into target directory", errno);
-            printf(" [target: %s]\n", argv[index]);
+            LOG(LOG_ERR, "Failed to chdir into target directory \"%s\" (%s)", argv[index], strerror(errno));
         }
 
 
@@ -185,7 +173,7 @@ int main(int argc, char** argv) {
         if (joincode != 0) {
 #ifdef DEBUG
             pthread_mutex_lock(&out_lock);
-            printf("[thread %0lx -- parent]: ERROR: failed to join child thread with ID: %0lx\n", SHORT_SELFID(), SHORT_ID(join_id));
+            LOG(LOG_ERR, "Failed to join child thread (child ID: %0lx)\n", join_id);
             pthread_mutex_unlock(&out_lock);
 #endif
             continue;
@@ -194,7 +182,7 @@ int main(int argc, char** argv) {
         if (joined_ll == NULL) {
 #ifdef DEBUG
             pthread_mutex_lock(&out_lock);
-            printf("[thread %0lx -- parent]: ERROR: child thread (ID %0lx) returned NULL (was unable to allocate memory).\n", SHORT_SELFID(), SHORT_ID(join_id));
+            LOG(LOG_ERR, "Child thread (ID: %0lx) returned NULL -- was unable to allocte memory.\n", join_id);
             pthread_mutex_unlock(&out_lock);
             continue;
 #endif
@@ -220,11 +208,11 @@ int main(int argc, char** argv) {
     pthread_mutex_unlock(&ht_lock);
 
     if (fclose(output_ptr)) {
-        WARN("Failed to close output file pointer.", errno);
+        LOG(LOG_WARNING, "Failed to close output file pointer! (%s)\n", strerror(errno));
     }
 
     if (fclose(logfile_ptr)) {
-        WARN("Failed to close log file pointer.", errno);
+        LOG(LOG_WARNING, "Failed to close log file pointer! (%s)\n", strerror(errno));
     }
 
     pthread_vector_destroy(top_threads);
@@ -232,11 +220,11 @@ int main(int argc, char** argv) {
     pthread_mutex_destroy(&ht_lock);
 
     if (config_abandonposition(&parent_position)) {
-        WARN_MSG("Failed to abandon parent position!");
+        LOG(LOG_WARNING, "Failed to abandon parent position!\n");
     }
 
     if (config_term(parent_config)) {
-        WARN_MSG("Failed to terminate marfs_config!");
+        LOG(LOG_WARNING, "Failed to terminate marfs_config!\n");
     }
 
     pthread_mutex_destroy(&erasure_lock);

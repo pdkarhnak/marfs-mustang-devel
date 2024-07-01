@@ -71,15 +71,18 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include "pthread_vector.h"
 #include "retcode_ll.h"
 
+#define ID_MASK 0xFFFFFFFF
+#define SHORT_ID() (pthread_self() & ID_MASK)
+#define LOG_PREFIX "thread_main"
+#include <logging/logging.h>
+
 #ifdef DEBUG
 #include <stdio.h>
 #include <assert.h>
-#define ID_MASK 0xFFFFFFFF
-#define SHORT_ID() (pthread_self() & ID_MASK)
 #endif
 
 void* thread_main(void* args) {
-    errno = 0;
+    errno = 0; // Since errno not guaranteed to be zero-initialized
 
     thread_args* this_args = (thread_args*) args;
 
@@ -108,8 +111,11 @@ void* thread_main(void* args) {
     // Recover a directory handle for the cwd to enable later readdir()
     MDAL_DHANDLE cwd_handle = thread_mdal->opendir(thread_position->ctxt, ".");
 
+    char cwd_ok = 1;
+
     if (cwd_handle == NULL) {
-        // TODO: log and continue/set some internal flag to skip readdir() calls after namespace checks
+        LOG(LOG_ERR, "Failed to open current directory for reading. (%s)\n", strerror(errno));
+        cwd_ok = 0;
     }
 
     pthread_vector* spawned_threads = pthread_vector_init(DEFAULT_CAPACITY);
@@ -190,12 +196,14 @@ void* thread_main(void* args) {
             int new_depth = config_traverse(this_args->base_config, child_position, &new_basepath, 0);
 
             if (new_depth < 0) {
+                LOG(LOG_ERR, "Failed to traverse to target: \"%s\"\n", current_entry->d_name);
                 // TODO: log, clean up, and continue
             }
             
             MDAL_DHANDLE next_cwd_handle = thread_mdal->opendir(child_position->ctxt, current_entry->d_name);
 
             if (thread_mdal->chdir(child_position->ctxt, next_cwd_handle)) {
+                LOG(LOG_ERR, "Failed to chdir to target directory.\n");
                 // TODO: log, clean up, and continue
             }
 
@@ -210,8 +218,7 @@ void* thread_main(void* args) {
                 pthread_vector_append(spawned_threads, next_id);
 #ifdef DEBUG
                 pthread_mutex_lock(this_args->stdout_lock);
-                printf("[thread %0lx]: forked new thread (ID: %0lx) at basepath %s\n", 
-                        SHORT_ID(), (next_id & 0xFFFFFFFF), current_entry->d_name);
+                LOG(LOG_DEBUG, "Forked new thread (ID: %0lx) at basepath %s\n", next_id, current_entry->d_name);
                 pthread_mutex_unlock(this_args->stdout_lock);
 #endif
             }
@@ -220,7 +227,7 @@ void* thread_main(void* args) {
         } else if (current_entry->d_type == DT_REG) {
 #ifdef DEBUG
             pthread_mutex_lock(this_args->stdout_lock);
-            printf("[thread %0lx]: recording file [%s]/'%s' in hashtable.\n", SHORT_ID(), this_args->basepath, current_entry->d_name);
+            LOG(LOG_DEBUG, "Recording file \"%s\" in hashtable.\n", current_entry->d_name);
             pthread_mutex_unlock(this_args->stdout_lock);
 #endif
 
@@ -234,7 +241,6 @@ void* thread_main(void* args) {
                 continue;
             }
 
-            // TODO: calculate object bounds and iterate accordingly
             size_t objno_min = retrieved_tag.objno;
             size_t objno_max = datastream_filebounds(&retrieved_tag);
             ne_erasure placeholder_erasure;
