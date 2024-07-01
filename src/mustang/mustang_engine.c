@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
 
         child_position->depth = child_depth;
 
-        thread_args* topdir_args = threadarg_init(parent_config, &parent_position, output_table, &ht_lock, next_basepath, logfile_ptr, &logfile_lock);
+        thread_args* topdir_args = threadarg_init(parent_config, child_position, output_table, &ht_lock, next_basepath, logfile_ptr, &logfile_lock);
 
 #ifdef DEBUG
         topdir_args->stdout_lock = &out_lock;        
