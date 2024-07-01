@@ -314,12 +314,7 @@ void* thread_main(void* args) {
 
     pthread_vector_destroy(spawned_threads);
 
-    config_abandonposition(args->base_position);
-    this_args->base_config = NULL;
-    this_args->basepath = NULL;
-    this_args->log_ptr = NULL;
-    this_free(args);
-
+    threadarg_destroy(this_args);
     thread_position = NULL;
 
     return (void*) this_ll;

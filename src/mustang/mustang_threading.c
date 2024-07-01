@@ -135,6 +135,7 @@ RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_p
 
 void threadarg_destroy(thread_args* args) {
     config_abandonposition(args->base_position);
+    free(args->base_position);
     args->base_config = NULL;
     args->basepath = NULL;
     args->log_ptr = NULL;
