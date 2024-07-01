@@ -252,6 +252,7 @@ void* thread_main(void* args) {
                 pthread_mutex_unlock(this_args->hashtable_lock);
             }
 
+            ftag_cleanup(file_ftagstr); // free internal allocated memory for FTAG's ctag and streamid fields
             free(file_ftagstr);
             file_ftagstr = NULL; // discard stale reference to FTAG to prevent double-free
             free(retrieved_id); // original string can be freed since data has been separately copied to hashtable
