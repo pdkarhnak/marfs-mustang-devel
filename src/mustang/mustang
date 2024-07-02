@@ -17,8 +17,12 @@ parser.add_argument("-p", "--paths", required=True, nargs='+', metavar='PATH',
         help='One or more POSIX-like paths to recursively traverse within a MarFS instance and catalog objects along.')
 parser.add_argument("-o", "--output", required=False, type=str, nargs='?', default=default_filename, metavar="FILE", 
         help='Output file where names of catalogged objects (as maintained in the program\'s hashtable) will be written.')
-parser.add_argument("-l", "--logfile", required=False, type=str, nargs='?', default=default_logname, metavar="LOGFILE",
-        help='Log file where thread-specific state changes, warnings, and errors will be recorded.')
+
+logging_group = parser.add_mutually_exclusive_group()
+logging_group.add_argument("-l", "--logfile", "--log-file", required=False, type=str, nargs='?', default=default_logname, metavar="LOGFILE",
+        help='Log file where thread-specific state changes, warnings, and errors will be recorded. Exclusive with --use-stdout.')
+logging_group.add_argument("--use-stdout", required=False, action='store_true', 
+        help='Do not log in a separate file and print all messages to stdout. Exclusive with -l/--logfile/--log-file.')
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -33,7 +37,12 @@ if __name__ == '__main__':
     final_handle = f"{args.output}_finalized"
 
     engine_args.append(init_output_handle)
-    engine_args.append(args.logfile)
+
+    if (args.use_stdout):
+        engine_args.append("stdout")
+    else:
+        engine_args.append(args.logfile)
+
     engine_args.extend(args.paths)
 
     print(f"Using invocation: {engine_args}")

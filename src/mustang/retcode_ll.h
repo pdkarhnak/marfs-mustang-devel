@@ -174,13 +174,13 @@ int retcode_ll_add(retcode_ll* rll, retcode* node);
  */
 retcode_ll* retcode_ll_concat(retcode_ll* dest, retcode_ll* src);
 
-/**
- * Safely flush the contents of the retcode_ll `list` to the relevant logging 
- * file specified by `logfile` by surrounding write operations with locks and
+/** 
+ * Safely flush the contents of the retcode_ll `list` to the relevant parent
+ * thread-managed logging file by surrounding write operations with locks and
  * unlocks on `logfile_lock`. Once writing is complete, empty (free) the space
  * associated with the retcode collection of `list`.
  */
-void retcode_ll_flush(retcode_ll* rll, FILE* logfile, pthread_mutex_t* logfile_lock);
+void retcode_ll_flush(retcode_ll* rll, pthread_mutex_t* logfile_lock);
 
 /** 
  * Destroy a retcode_ll struct and free all associated space, including for

@@ -41,29 +41,35 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    int log_fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC);
+    FILE* logfile_ptr = stdout;
 
-    if (dup2(log_fd, STDOUT_FILENO) == -1) {
-        LOG(LOG_ERR, "Failed to redirect stdout to log file fd (%s)\n", strerror(errno));
-        fclose(output_ptr);
-        close(log_fd);
-        return 1;
-    }
-    
-    close(STDOUT_FILENO);
+    if (strncmp(argv[2], "stdout", strlen("stdout")) != 0) {
+        int log_fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC);
 
-    if (dup2(log_fd, STDERR_FILENO) == -1) {
-        LOG(LOG_ERR, "Failed to redirect stderr to logfile fd (%s)\n", strerror(errno));
-        fclose(output_ptr);
-        close(log_fd);
-        return 1;
-    }
+        if (dup2(log_fd, STDOUT_FILENO) == -1) {
+            LOG(LOG_ERR, "Failed to redirect stdout to log file fd (%s)\n", strerror(errno));
+            fclose(output_ptr);
+            close(log_fd);
+            return 1;
+        }
+        
+        close(STDOUT_FILENO); // stdout has been redirected, so keep around only the new fd
 
-    FILE* logfile_ptr = fdopen(log_fd, "w");
+        if (dup2(log_fd, STDERR_FILENO) == -1) {
+            LOG(LOG_ERR, "Failed to redirect stderr to logfile fd (%s)\n", strerror(errno));
+            fclose(output_ptr);
+            close(log_fd);
+            return 1;
+        }
 
-    if (logfile_ptr == NULL) {
-        LOG(LOG_ERR, "Failed to open file \"%s\" for logging (%s)\n", argv[2], strerror(errno));
-        return 1;
+        close(STDERR_FILENO); // stderr has been redirected, so keep around only the new fd
+
+        FILE* logfile_ptr = fdopen(log_fd, "w");
+
+        if (logfile_ptr == NULL) {
+            LOG(LOG_ERR, "Failed to open file \"%s\" for logging (%s)\n", argv[2], strerror(errno));
+            return 1;
+        }
     }
 
     hashtable* output_table = hashtable_init();
@@ -85,7 +91,7 @@ int main(int argc, char** argv) {
     char* config_path = getenv("MARFS_CONFIG_PATH");
 
     if (config_path == NULL) {
-        LOG(LOG_ERR, "MARFS_CONFIG_PATH not set in environment--please set and try again.");
+        LOG(LOG_ERR, "MARFS_CONFIG_PATH not set in environment--please set and try again.\n");
         return 1;
     }
 
@@ -146,7 +152,7 @@ int main(int argc, char** argv) {
         }
 
         if (current_child_mdal->chdir(child_position->ctxt, child_dirhandle)) {
-            LOG(LOG_ERR, "Failed to chdir into target directory \"%s\" (%s)", argv[index], strerror(errno));
+            LOG(LOG_ERR, "Failed to chdir into target directory \"%s\" (%s)\n", argv[index], strerror(errno));
         }
 
 
@@ -199,12 +205,12 @@ int main(int argc, char** argv) {
         parent_ll = retcode_ll_concat(parent_ll, joined_ll);
 
         if (parent_ll->size >= RC_LL_LEN_MAX) {
-            retcode_ll_flush(parent_ll, logfile_ptr, &logfile_lock);    
+            retcode_ll_flush(parent_ll, &logfile_lock);    
         }
 
     }
 
-    retcode_ll_flush(parent_ll, logfile_ptr, &logfile_lock);
+    retcode_ll_flush(parent_ll, &logfile_lock);
     retcode_ll_destroy(parent_ll);
 
     pthread_mutex_destroy(&out_lock);

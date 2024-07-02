@@ -313,7 +313,7 @@ void* thread_main(void* args) {
         this_ll = retcode_ll_concat(this_ll, joined_ll);
 
         if (this_ll->size >= RC_LL_LEN_MAX) {
-            retcode_ll_flush(this_ll, this_args->log_ptr, this_args->log_lock);
+            retcode_ll_flush(this_ll, this_args->log_lock);
         }
 
     }

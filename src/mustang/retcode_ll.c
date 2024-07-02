@@ -60,6 +60,9 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <stdlib.h>
 #include <errno.h>
 
+#define LOG_PREFIX retcode_ll
+#include <logging/logging.h>
+
 retcode* node_init(char* new_basepath, RETCODE_FLAGS new_flags) {
     retcode* new_node = calloc(1, sizeof(retcode));
     
@@ -158,7 +161,7 @@ void retcode_ll_cleanlist(retcode* start) {
     } while (destroyed_node != NULL);
 }
 
-void retcode_ll_flush(retcode_ll* rll, FILE* logfile, pthread_mutex_t* logfile_lock) {
+void retcode_ll_flush(retcode_ll* rll, pthread_mutex_t* logfile_lock) {
     if (rll->size == 0) {
         return;
     }
@@ -169,7 +172,7 @@ void retcode_ll_flush(retcode_ll* rll, FILE* logfile, pthread_mutex_t* logfile_l
 
     do {
         retcode* next_ref = current_node->next;
-        fprintf(logfile, "[thread %0lx]: exited with code %x (basepath: %s)\n", current_node->self, current_node->flags, current_node->basepath);
+        LOG(LOG_INFO, "Thread %0lx exited with code %x (was created at basepath: %s)\n", current_node->self, current_node->flags, current_node->basepath);
         current_node = next_ref;
     } while (current_node != NULL);
 
