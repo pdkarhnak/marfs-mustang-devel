@@ -60,6 +60,8 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <stdlib.h>
 #include <errno.h>
 
+#define ID_MASK 0xFFFFFFFF
+#define SHORT_ID(id) (id & ID_MASK)
 #define LOG_PREFIX "retcode_ll"
 #include <logging/logging.h>
 
@@ -172,7 +174,7 @@ void retcode_ll_flush(retcode_ll* rll, pthread_mutex_t* logfile_lock) {
 
     do {
         retcode* next_ref = current_node->next;
-        LOG(LOG_INFO, "Thread %0lx exited with code %x (was created at basepath: %s)\n", current_node->self, current_node->flags, current_node->basepath);
+        LOG(LOG_INFO, "Thread %0lx exited with code %x (was created at basepath: %s)\n", SHORT_ID(current_node->self), current_node->flags, current_node->basepath);
         current_node = next_ref;
     } while (current_node != NULL);
 

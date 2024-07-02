@@ -70,7 +70,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #endif
 
 thread_args* threadarg_init(marfs_config* shared_config, marfs_position* shared_position, hashtable* new_hashtable, 
-        pthread_mutex_t* new_ht_lock, char* new_basepath, FILE* new_logfile, pthread_mutex_t* new_log_lock) {
+        pthread_mutex_t* new_ht_lock, char* new_basepath, pthread_mutex_t* new_log_lock) {
     thread_args* new_args = (thread_args*) calloc(1, sizeof(thread_args));
 
     if ((new_args == NULL) || (errno == ENOMEM)) {
@@ -82,9 +82,7 @@ thread_args* threadarg_init(marfs_config* shared_config, marfs_position* shared_
     new_args->hashtable = new_hashtable;
     new_args->hashtable_lock = new_ht_lock;
     new_args->basepath = new_basepath;
-    new_args->log_ptr = new_logfile;
     new_args->log_lock = new_log_lock;
-    new_args->stdout_lock = NULL;
 
     return new_args;
 }
@@ -105,12 +103,7 @@ RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_p
     new_args->hashtable_lock = existing->hashtable_lock;
 
     new_args->basepath = new_basepath;
-    new_args->log_ptr = existing->log_ptr;
     new_args->log_lock = existing->log_lock;
-
-#ifdef DEBUG
-    new_args->stdout_lock = existing->stdout_lock;
-#endif
 
     int createcode = pthread_create(thread_id, NULL, &thread_main, (void*) new_args);
 
@@ -125,10 +118,7 @@ RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_p
 
 void threadarg_destroy(thread_args* args) {
     config_abandonposition(args->base_position);
-    free(args->base_position);
     args->base_config = NULL;
-    args->basepath = NULL;
-    args->log_ptr = NULL;
     free(args);
 }
 

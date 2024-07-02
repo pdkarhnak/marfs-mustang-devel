@@ -72,7 +72,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include "retcode_ll.h"
 
 #define ID_MASK 0xFFFFFFFF
-#define SHORT_ID() (pthread_self() & ID_MASK)
+#define SHORT_ID(id) (id & ID_MASK)
 #define LOG_PREFIX "thread_main"
 #include <logging/logging.h>
 
@@ -223,16 +223,16 @@ void* thread_main(void* args) {
                     this_retcode->flags |= spawn_flags;
                 } else {
                     pthread_vector_append(spawned_threads, next_id);
-                    pthread_mutex_lock(this_args->stdout_lock);
-                    LOG(LOG_DEBUG, "Forked new thread (ID: %0lx) at basepath %s\n", next_id, current_entry->d_name);
-                    pthread_mutex_unlock(this_args->stdout_lock);
+                    pthread_mutex_lock(this_args->log_lock);
+                    LOG(LOG_DEBUG, "Forked new thread (ID: %0lx) at basepath %s\n", SHORT_ID(next_id), current_entry->d_name);
+                    pthread_mutex_unlock(this_args->log_lock);
                 }
 
 
             } else if (current_entry->d_type == DT_REG) {
-                pthread_mutex_lock(this_args->stdout_lock);
+                pthread_mutex_lock(this_args->log_lock);
                 LOG(LOG_DEBUG, "Recording file \"%s\" in hashtable.\n", current_entry->d_name);
-                pthread_mutex_unlock(this_args->stdout_lock);
+                pthread_mutex_unlock(this_args->log_lock);
 
                 file_ftagstr = get_ftag(thread_position, thread_mdal, current_entry->d_name);
                 FTAG retrieved_tag = {0};

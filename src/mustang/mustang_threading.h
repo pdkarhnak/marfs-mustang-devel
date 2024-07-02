@@ -86,10 +86,8 @@ typedef struct thread_args_struct {
     // thread opens.
     char* basepath; 
 
-    FILE* log_ptr;
     pthread_mutex_t* log_lock;
 
-    pthread_mutex_t* stdout_lock;
 
 } thread_args;
 
@@ -102,7 +100,7 @@ typedef struct thread_args_struct {
  * threads besides the top-level thread.
  */
 thread_args* threadarg_init(marfs_config* shared_config, marfs_position* shared_position, hashtable* new_hashtable, 
-        pthread_mutex_t* new_ht_lock, char* new_basepath, FILE* new_logfile, pthread_mutex_t* new_log_lock);
+        pthread_mutex_t* new_ht_lock, char* new_basepath, pthread_mutex_t* new_log_lock);
 
 /** 
  * Given a thread's arguments and new inputs for thread marfs_position and
