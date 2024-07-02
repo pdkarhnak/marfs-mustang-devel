@@ -114,7 +114,9 @@ int main(int argc, char** argv) {
     MDAL parent_mdal = parent_position.ns->prepo->metascheme.mdal;
     
     for (int index = 3; index < argc; index += 1) {
+        pthread_mutex_lock(&out_lock);
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
+        pthread_mutex_unlock(&out_lock);
 
         marfs_position* child_position = calloc(1, sizeof(marfs_position));
 
@@ -122,13 +124,9 @@ int main(int argc, char** argv) {
             LOG(LOG_ERR, "Failed to duplicate parent position to child!\n");
         }
 
-        char* next_basepath = strndup(argv[index], strlen(argv[index]));
+        char* next_basepath = strdup(argv[index]);
 
         int child_depth = config_traverse(parent_config, child_position, &next_basepath, 0);
-
-        if (config_fortifyposition(child_position)) {
-            LOG(LOG_ERR, "Failed to fortify child position after child traverse!\n");
-        }
 
         if (child_depth < 0) {
             LOG(LOG_ERR, "Failed to traverse (got depth: %d\n)", child_depth);
@@ -137,9 +135,17 @@ int main(int argc, char** argv) {
             continue;
         }
 
+        if (config_fortifyposition(child_position)) {
+            LOG(LOG_ERR, "Failed to fortify child position after child traverse!\n");
+        }
+
         MDAL_DHANDLE child_dirhandle;
 
         MDAL current_child_mdal = child_position->ns->prepo->metascheme.mdal;
+
+        pthread_mutex_lock(&out_lock);
+        LOG(LOG_DEBUG, "Verification: operating on supplied path/NS arg: %s\n", argv[index]);
+        pthread_mutex_unlock(&out_lock);
 
         if (child_depth == 0) {
             child_dirhandle = parent_mdal->opendirnamespace(child_position->ctxt, argv[index]);
@@ -148,13 +154,16 @@ int main(int argc, char** argv) {
         }
 
         if (child_dirhandle == NULL) {
+            pthread_mutex_lock(&out_lock);
             LOG(LOG_ERR, "Failed to open target directory/namespace \"%s\" (%s) (target was: %s)\n", argv[index], strerror(errno));
+            pthread_mutex_unlock(&out_lock);
         }
 
         if (current_child_mdal->chdir(child_position->ctxt, child_dirhandle)) {
+            pthread_mutex_lock(&out_lock);
             LOG(LOG_ERR, "Failed to chdir into target directory \"%s\" (%s)\n", argv[index], strerror(errno));
+            pthread_mutex_unlock(&out_lock);
         }
-
 
         child_position->depth = child_depth;
 
