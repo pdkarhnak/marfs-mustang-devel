@@ -60,7 +60,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <stdlib.h>
 #include <errno.h>
 
-#define LOG_PREFIX retcode_ll
+#define LOG_PREFIX "retcode_ll"
 #include <logging/logging.h>
 
 retcode* node_init(char* new_basepath, RETCODE_FLAGS new_flags) {
