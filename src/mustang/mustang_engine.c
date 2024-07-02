@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <pthread.h>
+#include <libgen.h>
 #include <marfs.h>
 #include <config/config.h>
 #include <datastream/datastream.h>
@@ -98,9 +99,7 @@ int main(int argc, char** argv) {
         config_abandonposition(&parent_position);
         return 1;
     }
-
-    MDAL parent_mdal = parent_position.ns->prepo->metascheme.mdal;
-    
+ 
     for (int index = 3; index < argc; index += 1) {
         pthread_mutex_lock(&logging_lock);
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
@@ -113,6 +112,7 @@ int main(int argc, char** argv) {
         }
 
         char* next_basepath = strdup(argv[index]);
+        char* basename;
 
         int child_depth = config_traverse(parent_config, child_position, &next_basepath, 0);
 
@@ -131,26 +131,18 @@ int main(int argc, char** argv) {
 
         MDAL current_child_mdal = child_position->ns->prepo->metascheme.mdal;
 
-        if (child_depth == 0) {
-            child_dirhandle = parent_mdal->opendirnamespace(child_position->ctxt, argv[index]);
+        if (child_depth != 0) {
+            child_dirhandle = current_child_mdal->opendir(child_position->ctxt, next_basepath);
 
             if (child_dirhandle == NULL) {
                 pthread_mutex_lock(&logging_lock);
-                LOG(LOG_ERR, "Failed to open target namespace \"%s\" (%s)\n", argv[index], strerror(errno));
-                pthread_mutex_unlock(&logging_lock);
-            }
-        } else {
-            child_dirhandle = current_child_mdal->opendir(child_position->ctxt, argv[index]);
-
-            if (child_dirhandle == NULL) {
-                pthread_mutex_lock(&logging_lock);
-                LOG(LOG_ERR, "Failed to open target directory \"%s\" (%s)\n", argv[index], strerror(errno));
+                LOG(LOG_ERR, "Failed to open target directory \"%s\" (%s)\n", next_basepath, strerror(errno));
                 pthread_mutex_unlock(&logging_lock);
             }
 
             if (current_child_mdal->chdir(child_position->ctxt, child_dirhandle)) {
                 pthread_mutex_lock(&logging_lock);
-                LOG(LOG_ERR, "Failed to chdir into target directory \"%s\" (%s)\n", argv[index], strerror(errno));
+                LOG(LOG_ERR, "Failed to chdir into target directory \"%s\" (%s)\n", next_basepath, strerror(errno));
                 pthread_mutex_unlock(&logging_lock);
             }
         }

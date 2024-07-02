@@ -114,7 +114,7 @@ void* thread_main(void* args) {
     char cwd_ok = 1;
 
     if (cwd_handle == NULL) {
-        LOG(LOG_ERR, "Failed to open current directory for reading. (%s)\n", strerror(errno));
+        LOG(LOG_ERR, "Failed to open current directory for reading (%s)\n", strerror(errno));
         cwd_ok = 0;
     }
 
@@ -123,6 +123,7 @@ void* thread_main(void* args) {
     if (spawned_threads == NULL) {
         this_retcode->flags |= ALLOC_FAILED;
         retcode_ll_add(this_ll, this_retcode);
+        thread_mdal->close(cwd_handle);
         threadarg_destroy(this_args);
         return (void*) this_ll;
     }
@@ -137,14 +138,20 @@ void* thread_main(void* args) {
                 marfs_position* child_ns_position = (marfs_position*) calloc(1, sizeof(marfs_position));
 
                 if (config_duplicateposition(thread_position, child_ns_position)) {
-                    // TODO: clean up and continue
+                    LOG(LOG_ERR, "Failed to duplicate position for new child thread\n");
+                    free(child_ns_position);
+                    continue;
                 }
                 
                 char* child_ns_path = strdup(current_subnode.name);
                 if (config_traverse(this_args->base_config, child_ns_position, &child_ns_path, 0)) {
-                    // TODO: log, clean up, and continue
+                    pthread_mutex_lock(this_args->log_lock);
+                    LOG(LOG_ERR, "Failed to traverse to new child position: %s\n", current_subnode.name);
+                    pthread_mutex_unlock(this_args->log_lock);
+
                     free(child_ns_path);
                     config_abandonposition(child_ns_position);
+                    free(child_ns_position);
                     continue;
                 }
 

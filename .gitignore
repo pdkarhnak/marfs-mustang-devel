@@ -295,3 +295,4 @@ src/mustang/testing-logs/
 src/mustang/*.txt
 src/mustang/tests
 src/mustang/outputs/
+src/mustang/toy-chest/
