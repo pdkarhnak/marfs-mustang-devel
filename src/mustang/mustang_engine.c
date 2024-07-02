@@ -35,15 +35,34 @@ int main(int argc, char** argv) {
     }
 
     FILE* output_ptr = fopen(argv[1], "w");
-    FILE* logfile_ptr = fopen(argv[2], "w");
 
     if (output_ptr == NULL) {
-        LOG(LOG_ERR, "Failed to open file \"%s\" for writing to output\n", argv[1]);
+        LOG(LOG_ERR, "Failed to open file \"%s\" for writing to output (%s)\n", argv[1], strerror(errno));
         return 1;
     }
 
+    int log_fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC);
+
+    if (dup2(log_fd, STDOUT_FILENO) == -1) {
+        LOG(LOG_ERR, "Failed to redirect stdout to log file fd (%s)\n", strerror(errno));
+        fclose(output_ptr);
+        close(log_fd);
+        return 1;
+    }
+    
+    close(STDOUT_FILENO);
+
+    if (dup2(log_fd, STDERR_FILENO) == -1) {
+        LOG(LOG_ERR, "Failed to redirect stderr to logfile fd (%s)\n", strerror(errno));
+        fclose(output_ptr);
+        close(log_fd);
+        return 1;
+    }
+
+    FILE* logfile_ptr = fdopen(log_fd, "w");
+
     if (logfile_ptr == NULL) {
-        LOG(LOG_ERR, "Failed to open file \"%s\" for logging\n", argv[2]);
+        LOG(LOG_ERR, "Failed to open file \"%s\" for logging (%s)\n", argv[2], strerror(errno));
         return 1;
     }
 
