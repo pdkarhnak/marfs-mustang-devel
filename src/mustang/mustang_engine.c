@@ -9,14 +9,9 @@
 #include <config/config.h>
 #include <datastream/datastream.h>
 
+#include "mustang_logging.h"
 #define LOG_PREFIX "mustang_engine"
 #include <logging/logging.h>
-
-#ifdef DEBUG
-#include <assert.h>
-#define ID_MASK 0xFFFFFFFF
-#define SHORT_ID(id) (id & ID_MASK)
-#endif
 
 #include "hashtable.h"
 #include "mustang_threading.h"
@@ -176,7 +171,6 @@ int main(int argc, char** argv) {
         pthread_mutex_lock(&logging_lock);
         LOG(LOG_INFO, "Created top-level thread with ID: %0lx and basepath \"%s\"\n", SHORT_ID(next_id), next_basepath);
         pthread_mutex_unlock(&logging_lock);
-
     }
  
     pthread_t join_id;
@@ -221,6 +215,8 @@ int main(int argc, char** argv) {
     retcode_ll_destroy(parent_ll);
 
     pthread_mutex_destroy(&logging_lock);
+
+    fprintf(output_ptr, "Preparing to dump hashtable...\n\n");
 
     pthread_mutex_lock(&ht_lock);
     hashtable_dump(output_table, output_ptr);

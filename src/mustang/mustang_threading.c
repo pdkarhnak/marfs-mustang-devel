@@ -116,10 +116,11 @@ RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_p
     return flags;
 }
 
-void threadarg_destroy(thread_args* args) {
-    config_abandonposition(args->base_position);
+int threadarg_destroy(thread_args* args) {
+    int abandon_code = config_abandonposition(args->base_position);
     args->base_config = NULL;
     free(args);
+    return abandon_code;
 }
 
 char* get_ftag(marfs_position* current_position, MDAL current_mdal, char* path) {

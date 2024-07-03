@@ -121,7 +121,7 @@ RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_p
  * be called after mustang_spawn() is called for all applicable new threads 
  * which will traverse encountered subdirectories.
  */
-void threadarg_destroy(thread_args* args);
+int threadarg_destroy(thread_args* args);
 
 char* get_ftag(marfs_position* current_position, MDAL current_mdal, char* path);
 

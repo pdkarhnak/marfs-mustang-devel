@@ -70,15 +70,10 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include "pthread_vector.h"
 #include "retcode_ll.h"
 
-#define ID_MASK 0xFFFFFFFF
-#define SHORT_ID(id) (id & ID_MASK)
+#include "mustang_logging.h"
 #define LOG_PREFIX "thread_main"
 #include <logging/logging.h>
 
-#ifdef DEBUG
-#include <stdio.h>
-#include <assert.h>
-#endif
 
 void* thread_main(void* args) {
     errno = 0; // Since errno not guaranteed to be zero-initialized
@@ -114,6 +109,7 @@ void* thread_main(void* args) {
 
     if (cwd_handle == NULL) {
         LOG(LOG_ERR, "Failed to open current directory for reading (%s)\n", strerror(errno));
+        this_retcode->flags |= OPENDIR_FAILED;
         cwd_ok = 0;
     }
 
@@ -144,6 +140,7 @@ void* thread_main(void* args) {
                 
                 char* child_ns_path = strdup(current_subnode.name);
                 if (config_traverse(this_args->base_config, child_ns_position, &child_ns_path, 0)) {
+                    this_retcode->flags |= TRAVERSE_FAILED;
                     pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_ERR, "Failed to traverse to new child position: %s\n", current_subnode.name);
                     pthread_mutex_unlock(this_args->log_lock);
@@ -215,8 +212,14 @@ void* thread_main(void* args) {
                 
                 MDAL_DHANDLE next_cwd_handle = thread_mdal->opendir(child_position->ctxt, current_entry->d_name);
 
+                if (next_cwd_handle == NULL) {
+                    // TODO: log, clean up, and continue
+                    this_retcode->flags |= NEW_OPENDIR_FAILED;
+                }
+
                 if (thread_mdal->chdir(child_position->ctxt, next_cwd_handle)) {
                     LOG(LOG_ERR, "Failed to chdir to target directory.\n");
+                    this_retcode->flags |= CHDIR_FAILED;
                     // TODO: log, clean up, and continue
                 }
 
@@ -328,11 +331,14 @@ void* thread_main(void* args) {
         this_retcode->flags |= CLOSEDIR_FAILED;
     }
 
-    retcode_ll_add(this_ll, this_retcode);
-
     pthread_vector_destroy(spawned_threads);
 
-    threadarg_destroy(this_args);
+    if(threadarg_destroy(this_args)) {
+        this_retcode->flags |= ABANDONPOS_FAILED;
+    }
+
+    retcode_ll_add(this_ll, this_retcode);
+
     thread_position = NULL;
 
     return (void*) this_ll;

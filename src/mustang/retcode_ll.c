@@ -60,8 +60,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <stdlib.h>
 #include <errno.h>
 
-#define ID_MASK 0xFFFFFFFF
-#define SHORT_ID(id) (id & ID_MASK)
+#include "mustang_logging.h"
 #define LOG_PREFIX "retcode_ll"
 #include <logging/logging.h>
 
@@ -187,6 +186,45 @@ void retcode_ll_flush(retcode_ll* rll, pthread_mutex_t* logfile_lock) {
     rll->size = 0;
     rll->head = NULL;
     rll->tail = NULL;
+}
+
+void interpret_flags(retcode* current_node) {
+    if (current_node->flags & ALLOC_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to allocate memory.\n", SHORT_ID(current_node->self));
+    }
+
+    if (current_node->flags & CHILD_ALLOC_FAILED) {
+        LOG(LOG_ERR, "At least one child of thread %0lx was unable to set up and exited.\n", SHORT_ID(current_node->self));
+    }
+
+    if (current_node->flags & FTAG_INIT_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to initialize an FTAG in at least one case.\n", SHORT_ID(current_node->self));
+    }
+
+    if (current_node->flags & FORTIFYPOS_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to fortify its position.\n", SHORT_ID(current_node->self));
+    }
+
+    if (current_node->flags & DUPPOS_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to duplicate its position in at least one case.\n", SHORT_ID(current_node->self));
+    }
+
+    if (current_node->flags & TRAVERSE_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx made at lesat one unsuccessful config_traverse() call.\n", SHORT_ID(current_node->self));
+    }
+
+    if (current_node->flags & PTHREAD_CREATE_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx had at least one pthread_create() call fail.\n", SHORT_ID(current_node->self));
+    }
+
+    if (current_node->flags & PTHREAD_JOIN_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx failed to join at least one thread.\n", SHORT_ID(current_node->self));
+    }
+
+    if (current_node->flags & ABANDONPOS_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to abandon its position.\n", SHORT_ID(current_node->self));
+    }
+
 }
 
 void retcode_ll_destroy(retcode_ll* rll) {

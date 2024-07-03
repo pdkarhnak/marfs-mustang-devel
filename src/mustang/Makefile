@@ -34,10 +34,10 @@ libmustang.a: pthread_vector.o mustang_threading.o hashtable.o retcode_ll.o
 
 # thread_main and retcode_ll (specifically retcode_ll_flush) need to link 
 # against the logging library. So, create special rules for those object files.
-thread_main.o: thread_main.c
+thread_main.o: thread_main.c mustang_logging.h
 	$(CC) $(CFLAGS) $(MARFS_INCLUDE) -c $< -llogging
 
-retcode_ll.o: retcode_ll.c retcode_ll.h
+retcode_ll.o: retcode_ll.c retcode_ll.h mustang_logging.h
 	$(CC) $(CFLAGS) $(MARFS_INCLUDE) -c $< -llogging
 
 %.o: %.c %.h

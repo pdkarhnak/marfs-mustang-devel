@@ -73,18 +73,18 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 typedef enum {
     RETCODE_SUCCESS =           0x0,
     ALLOC_FAILED,            /* 0x1 */
-    DIR_OPEN_FAILED,         /* 0x2 */
-    NEW_DIRFD_OPEN_FAILED =     0x4,
-    THREADARG_FORK_FAILED =     0x8,
+    OPENDIR_FAILED,          /* 0x2 */
+    NEW_OPENDIR_FAILED =        0x4,
+    CHDIR_FAILED =              0x8,
     PTHREAD_CREATE_FAILED =     0x10,
     PTHREAD_JOIN_FAILED =       0x20,
     CHILD_ALLOC_FAILED =        0x40, /* Child couldn't set up and returned NULL */
     DUPPOS_FAILED =             0x80,
     TRAVERSE_FAILED =           0x100,
     CLOSEDIR_FAILED =           0x200,
-    ABANDONPOS_FAILED =         0x400,
     FORTIFYPOS_FAILED =         0x800,
-    FTAG_INIT_FAILED =          0x1000
+    FTAG_INIT_FAILED =          0x1000,
+    ABANDONPOS_FAILED =         0x2000
 } RETCODE_FLAGS;
 
 typedef struct retcode_struct retcode;
