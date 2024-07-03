@@ -62,7 +62,6 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <sys/types.h>
 #include <dirent.h>
 #include <errno.h>
-#include <limits.h>
 #include <mdal/mdal.h>
 #include <tagging/tagging.h>
 #include <datastream/datastream.h>

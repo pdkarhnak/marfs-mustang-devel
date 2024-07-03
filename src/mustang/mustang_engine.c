@@ -5,7 +5,6 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <pthread.h>
-#include <libgen.h>
 #include <marfs.h>
 #include <config/config.h>
 #include <datastream/datastream.h>
@@ -132,7 +131,6 @@ int main(int argc, char** argv) {
         }
 
         char* next_basepath = strdup(argv[index]);
-        char* basename;
 
         int child_depth = config_traverse(parent_config, child_position, &next_basepath, 0);
 
