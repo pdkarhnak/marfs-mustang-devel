@@ -39,8 +39,9 @@ int main(int argc, char** argv) {
     char* invalid = NULL;
     size_t capacity_power = (size_t) strtol(argv[1], &invalid, 10);
 
-    if ((capacity_power <= 0) || (errno == EINVAL) || (*invalid != '\0')) {
-        LOG(LOG_ERR, "Bad hashtable capacity argument \"\" received. Please specify a positive integer between 1 and 64, then try again.\n", argv[1]);
+    if ( ((capacity_power <= 0) || (capacity_power >= 64)) || 
+            (errno == EINVAL) || (*invalid != '\0')) {
+        LOG(LOG_ERR, "Bad hashtable capacity argument \"%s\" received. Please specify a positive integer between 1 and 64, then try again.\n", argv[1]);
         return 1;
     }
 

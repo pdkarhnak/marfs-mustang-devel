@@ -31,7 +31,7 @@ if __name__ == '__main__':
         print("Executable for MUSTANG engine does not exist! Please build it and try again.")
         exit(1)
 
-    engine_args = ["./mustang_engine"]
+    engine_args = ["mustang_engine"]
     engine_args.append(str(args.capacity))
 
     init_output_handle = f"{args.output}_in-progress"
