@@ -32,6 +32,7 @@ if __name__ == '__main__':
     engine_args = ["./mustang_engine"]
 
     init_output_handle = f"{args.output}_in-progress"
+
     final_handle = f"{args.output}_finalized"
 
     engine_args.append(init_output_handle)
