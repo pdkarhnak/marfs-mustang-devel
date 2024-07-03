@@ -76,17 +76,25 @@ void MurmurHash3_x64_128( const void* key, const int len, const uint32_t seed,
  * A wrapper around the MurmurHash3 calls to return a "friendly" 
  * capacity-aligned index.
  */
-uint64_t hashcode(char* name) {
+uint64_t hashcode(hashtable* table, char* name) {
     uint64_t murmur_result[2];
     MurmurHash3_x64_128(name, strlen(name), KEY_SEED, murmur_result);
-    return murmur_result[0] & CAPACITY_MASK;
+    return murmur_result[0] & (table->capacity_mask);
 }
 
-hashtable* hashtable_init(void) {
+hashtable* hashtable_init(size_t new_capacity) {
     hashtable* new_table = calloc(1, sizeof(hashtable));
 
-    // CAPACITY constant defined in "hashtable.h"
-    for (int node_index = 0; node_index < CAPACITY; node_index += 1) {
+    new_table->stored_nodes = (char**) calloc(new_capacity, sizeof(char*));
+
+    if (new_table == NULL) {
+        return NULL;
+    }
+    
+    new_table->capacity = new_capacity;
+    new_table->capacity_mask = new_capacity - 1;
+
+    for (int node_index = 0; node_index < new_capacity; node_index += 1) {
         new_table->stored_nodes[node_index] = NULL;
     }
 
@@ -94,12 +102,13 @@ hashtable* hashtable_init(void) {
 }
 
 int hashtable_destroy(hashtable* table) {
-    for (int node_index = 0; node_index < CAPACITY; node_index += 1) {
+    for (int node_index = 0; node_index < table->capacity; node_index += 1) {
         if (table->stored_nodes[node_index]) {
             free(table->stored_nodes[node_index]);
         }
     }
     
+    free(table->stored_nodes);
     free(table); 
 
     return 0;
@@ -108,7 +117,7 @@ int hashtable_destroy(hashtable* table) {
 char* get(hashtable* table, char* key) {
     // Recompute the hash to see which index (and, therefore, which relevant
     // node) to search
-    uint64_t computed_hashcode = hashcode(key); 
+    uint64_t computed_hashcode = hashcode(table, key); 
     return table->stored_nodes[computed_hashcode];
 }
 
@@ -116,9 +125,8 @@ void put(hashtable* table, char* new_object_name) {
     // Compute the hash to see which index (and, therefore, which relevant
     // node) to insert at
     
-    uint64_t mapped_hashcode = hashcode(new_object_name);
+    uint64_t mapped_hashcode = hashcode(table, new_object_name);
 
-    // TODO: consider how to fix memory leaks if hash collision occurs (i.e., how to catch-and-free within this function?)
     if ((table->stored_nodes)[mapped_hashcode] != NULL) {
         return;
     } else {
@@ -127,7 +135,7 @@ void put(hashtable* table, char* new_object_name) {
 }
 
 void hashtable_dump(hashtable* table, FILE* output) {
-    for (size_t index = 0; index < CAPACITY; index += 1) {
+    for (size_t index = 0; index < table->capacity; index += 1) {
         if ((table->stored_nodes)[index] != NULL) {
             fprintf(output, "Index %zu:\t%s\n", index, (table->stored_nodes)[index]);
         }

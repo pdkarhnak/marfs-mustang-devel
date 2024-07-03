@@ -10,11 +10,13 @@ startup_timestamp = datetime.datetime.now()
 default_filename = f"mustang-output-{startup_timestamp.year}{startup_timestamp.month}{startup_timestamp.day}-{startup_timestamp.hour}-{startup_timestamp.minute}-{startup_timestamp.second}"
 default_logname = f"mustang-run-{startup_timestamp.year}{startup_timestamp.month}{startup_timestamp.day}-{startup_timestamp.hour}-{startup_timestamp.minute}-{startup_timestamp.second}.log"
 
-parser = argparse.ArgumentParser(prog='./mustang.py', description='Parse command-line arguments as a wrapper for the MUSTANG binary.')
+parser = argparse.ArgumentParser(prog='mustang', description='Parse command-line arguments as a wrapper for the mustang_engine binary.')
 parser.add_argument("-p", "--paths", required=True, nargs='+', metavar='PATH', 
         help='One or more POSIX-like paths to recursively traverse within a MarFS instance and catalog objects along.')
 parser.add_argument("-o", "--output", required=False, type=str, nargs='?', default=default_filename, metavar="FILE", 
         help='Output file where names of catalogged objects (as maintained in the program\'s hashtable) will be written.')
+parser.add_argument("-c", "--capacity", "--hashtable-capacity", required=False, type=int, nargs='?', default=16, choices=range(1, 64), metavar="PWR", 
+        help='Power of 2 determining output capacity (e.g., default 16 -> 2^16 -> capacity = 65536).')
 
 logging_group = parser.add_mutually_exclusive_group()
 logging_group.add_argument("-l", "--logfile", "--log-file", required=False, type=str, nargs='?', default=default_logname, metavar="LOGFILE",
@@ -30,6 +32,7 @@ if __name__ == '__main__':
         exit(1)
 
     engine_args = ["./mustang_engine"]
+    engine_args.append(str(args.capacity))
 
     init_output_handle = f"{args.output}_in-progress"
 

@@ -62,27 +62,19 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <stdint.h>
 #include <stdio.h>
 
-/**
- * A customizable constant which will directly control the maximum number of
- * hash nodes and indirectly control the general likelihood of hash collisions.
- */
-#ifndef CAPACITY
-#define CAPACITY (1024)
-#define CAPACITY_MASK ((uint64_t) (CAPACITY - 1))    // assuming CAPACITY is aligned to a power of 2 for "clean" bitmasking
-#endif
+#define KEY_SEED 43 // a prime number arbitrarily and pseudorandomly chosen from the range [13, 173] to seed the hashing algorithm
 
-#define KEY_SEED 43     // A prime number arbitrarily (and pseudorandomly) selected from the range [13, 173]
-
-// Essentially a "direct" alias for an array of char* elements
 typedef struct hashtable_struct {  
-    char* stored_nodes[CAPACITY];
+    size_t capacity;
+    size_t capacity_mask;
+    char** stored_nodes;
 } hashtable;
 
 /**
- * Initialize a hashtable on the heap, including space for all CAPACITY
+ * Initialize a hashtable on the heap, including space for all `new_capacity`
  * hashnodes.
  */
-hashtable* hashtable_init(void);
+hashtable* hashtable_init(size_t new_capacity);
 
 /**
  * Destroy a hashtable on the heap, freeing all memory associated with the

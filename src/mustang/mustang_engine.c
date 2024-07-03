@@ -28,13 +28,32 @@ extern void* thread_main(void* args);
 
 int main(int argc, char** argv) {
 
-    if (argc < 3) {
-        printf("USAGE: ./mustang-engine [output file] [log file] [max threads] [paths, ...]\n");
+    errno = 0; // to guarantee an initially successful context and avoid "false positive" errno settings (errno not guaranteed to be initialized)
+
+    if (argc < 4) {
+        printf("USAGE: ./mustang-engine [capacity exponent] [output file] [log file] [paths, ...]\n");
         printf("\tHINT: see mustang wrapper or invoke \"mustang -h\" for more details.\n");
+        return 1;
+    } 
+
+    char* invalid = NULL;
+    size_t capacity_power = (size_t) strtol(argv[1], &invalid, 10);
+
+    if ((capacity_power <= 0) || (errno == EINVAL) || (*invalid != '\0')) {
+        LOG(LOG_ERR, "Bad hashtable capacity argument \"\" received. Please specify a positive integer between 1 and 64, then try again.\n", argv[1]);
         return 1;
     }
 
-    FILE* output_ptr = fopen(argv[1], "w");
+    size_t computed_capacity = 1;
+    computed_capacity <<= capacity_power;
+
+    if (capacity_power < 5) {
+        LOG(LOG_WARNING, "Provided hashtable argument \"%s\" will result in very small capacity %zu\n", argv[1], computed_capacity);
+    } else if (capacity_power >= 33) {
+        LOG(LOG_WARNING, "Provided hashtable argument \"%s\" will result in very large capacity %zu\n", argv[1], computed_capacity);
+    }
+
+    FILE* output_ptr = fopen(argv[2], "w");
 
     if (output_ptr == NULL) {
         LOG(LOG_ERR, "Failed to open file \"%s\" for writing to output (%s)\n", argv[1], strerror(errno));
@@ -42,8 +61,8 @@ int main(int argc, char** argv) {
     }
 
     // If stdout not being used for logging, redirect stdout and stderr to specified file
-    if (strncmp(argv[2], "stdout", strlen("stdout")) != 0) {
-        int log_fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (strncmp(argv[3], "stdout", strlen("stdout")) != 0) {
+        int log_fd = open(argv[3], O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
         if (dup2(log_fd, STDOUT_FILENO) == -1) {
             LOG(LOG_ERR, "Failed to redirect stdout to log file fd (%s)\n", strerror(errno));
@@ -62,7 +81,7 @@ int main(int argc, char** argv) {
         close(log_fd); // stdout and stderr have been redirected, so no need for the new fd
     }
 
-    hashtable* output_table = hashtable_init();
+    hashtable* output_table = hashtable_init(computed_capacity);
     
     if ((output_table == NULL) || (errno == ENOMEM)) {
         LOG(LOG_ERR, "Failed to initialize hashtable (%s)\n", strerror(errno));
@@ -100,7 +119,7 @@ int main(int argc, char** argv) {
         return 1;
     }
  
-    for (int index = 3; index < argc; index += 1) {
+    for (int index = 4; index < argc; index += 1) {
         pthread_mutex_lock(&logging_lock);
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
         pthread_mutex_unlock(&logging_lock);
