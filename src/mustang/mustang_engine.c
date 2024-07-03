@@ -9,6 +9,12 @@
 #include <config/config.h>
 #include <datastream/datastream.h>
 
+#ifdef DEBUG_MUSTANG
+#define DEBUG DEBUG_MUSTANG
+#elif (defined DEBUG_ALL)
+#define DEBUG DEBUG_ALL
+#endif
+
 #include "mustang_logging.h"
 #define LOG_PREFIX "mustang_engine"
 #include <logging/logging.h>

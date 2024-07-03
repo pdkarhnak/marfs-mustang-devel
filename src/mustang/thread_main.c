@@ -70,6 +70,12 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include "pthread_vector.h"
 #include "retcode_ll.h"
 
+#ifdef DEBUG_MUSTANG
+#define DEBUG DEBUG_MUSTANG
+#elif (defined DEBUG_ALL)
+#define DEBUG DEBUG_ALL
+#endif
+
 #include "mustang_logging.h"
 #define LOG_PREFIX "thread_main"
 #include <logging/logging.h>
