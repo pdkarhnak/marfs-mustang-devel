@@ -71,8 +71,6 @@ if __name__ == '__main__':
 
     print(f"Using invocation: {engine_args}")
 
-    exit(0)
-
     try:
         subprocess.run(engine_args)
         shutil.move(init_output_handle, final_handle) 

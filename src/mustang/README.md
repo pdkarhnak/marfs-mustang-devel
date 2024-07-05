@@ -72,7 +72,7 @@ corresponding to an active MarFS location where traversal will begin. The
 frontend will not check whether the absolute path actually maps to the MarFS
 instance; rather, such an error will likely be caught within the engine itself
 and reported as a failed call to the internal MarFS traversal routine. For a
-complete listing of arguments and usage information, see `./mustang -h`.
+complete listing of arguments and usage information, see `mustang -h`.
 
 # Acknowledgments
 
