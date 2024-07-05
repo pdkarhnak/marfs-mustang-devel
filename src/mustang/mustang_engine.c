@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <pthread.h>
@@ -120,10 +121,29 @@ int main(int argc, char** argv) {
         return 1;
     }
  
+    // TODO: stat each path to ensure they are directories and not files/other objects
     for (int index = 4; index < argc; index += 1) {
         pthread_mutex_lock(&logging_lock);
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
         pthread_mutex_unlock(&logging_lock);
+
+        struct stat arg_statbuf;
+
+        int statcode = stat(argv[index], &arg_statbuf);
+
+        if (statcode) {
+            pthread_mutex_lock(&logging_lock);
+            LOG(LOG_ERR, "Failed to stat path arg \"%s\" (%s)\n", argv[index], strerror(errno));
+            pthread_mutex_unlock(&logging_lock);
+            continue;
+        }
+
+        if ((arg_statbuf.st_mode & S_IFMT) != S_IFDIR) {
+            pthread_mutex_lock(&logging_lock);
+            LOG(LOG_WARNING, "Path arg \"%s\" does not target a directory--skipping arg\n", argv[index]);
+            pthread_mutex_unlock(&logging_lock);
+            continue;
+        }
 
         marfs_position* child_position = calloc(1, sizeof(marfs_position));
 
