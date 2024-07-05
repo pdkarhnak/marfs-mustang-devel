@@ -45,9 +45,33 @@ if __name__ == '__main__':
     else:
         engine_args.append(args.logfile)
 
-    engine_args.extend(args.paths)
+    for path_arg in args.paths:
+        tmp_arg = ''
+
+        # If path contains a trailing glob (e.g., "/campaign/*"), attempt to 
+        # slice the string so that the trailing glob is excluded
+        if (path_arg[-1] == '*'):
+            print("WARNING: ignoring trailing glob (\"*\") in path.")
+            tmp_arg = path_arg[:-1:1]
+            print(f"Attempting to use prefix path \"{tmp_arg}\".")
+        
+        # Otherwise, if a glob is found _not_ at the trailing index of a string 
+        # (end index of .find() is exclusive, so string actually searched until 
+        # index -2), reject the path outright
+        if (path_arg.find('*', 0, -1) != -1):
+            print("ERROR: non-trailing glob (\"*\") found in string. Skipping this path argument.")
+            continue
+
+        # If string was sliced to exclude a trailing glob, append that new 
+        # string; else, simply append the argument as normal
+        if (tmp_arg):
+            engine_args.append(tmp_arg)
+        else:
+            engine_args.append(path_arg)
 
     print(f"Using invocation: {engine_args}")
+
+    exit(0)
 
     try:
         subprocess.run(engine_args)

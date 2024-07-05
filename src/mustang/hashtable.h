@@ -59,6 +59,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #ifndef __HASHTABLE_H__
 #define __HASHTABLE_H__
 
+#include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -80,7 +81,7 @@ hashtable* hashtable_init(size_t new_capacity);
  * Destroy a hashtable on the heap, freeing all memory associated with the
  * table including the space for all CAPACITY nodes.
  */
-int hashtable_destroy(hashtable* table);
+void hashtable_destroy(hashtable* table);
 
 /** 
  * The public function to get an associated value for a particular key.

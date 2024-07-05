@@ -58,8 +58,6 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 
 #include "hashtable.h"
 #include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
 
 /** 
  * Internal hashing function: MurmurHash3_x64_128 by Austin Appleby. See
@@ -94,15 +92,15 @@ hashtable* hashtable_init(size_t new_capacity) {
     new_table->capacity = new_capacity;
     new_table->capacity_mask = new_capacity - 1;
 
-    for (int node_index = 0; node_index < new_capacity; node_index += 1) {
+    for (size_t node_index = 0; node_index < new_capacity; node_index += 1) {
         new_table->stored_nodes[node_index] = NULL;
     }
 
     return new_table;
 }
 
-int hashtable_destroy(hashtable* table) {
-    for (int node_index = 0; node_index < table->capacity; node_index += 1) {
+void hashtable_destroy(hashtable* table) {
+    for (size_t node_index = 0; node_index < table->capacity; node_index += 1) {
         if (table->stored_nodes[node_index]) {
             free(table->stored_nodes[node_index]);
         }
@@ -110,8 +108,6 @@ int hashtable_destroy(hashtable* table) {
     
     free(table->stored_nodes);
     free(table); 
-
-    return 0;
 }
 
 char* get(hashtable* table, char* key) {
