@@ -114,7 +114,9 @@ void* thread_main(void* args) {
     char cwd_ok = 1;
 
     if (cwd_handle == NULL) {
+        pthread_mutex_lock(this_args->log_lock);
         LOG(LOG_ERR, "Failed to open current directory for reading (%s)\n", strerror(errno));
+        pthread_mutex_unlock(this_args->log_lock);
         this_retcode->flags |= OPENDIR_FAILED;
         cwd_ok = 0;
     }
@@ -224,7 +226,9 @@ void* thread_main(void* args) {
                 }
 
                 if (thread_mdal->chdir(child_position->ctxt, next_cwd_handle)) {
+                    pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_ERR, "Failed to chdir to target directory.\n");
+                    pthread_mutex_unlock(this_args->log_lock);
                     this_retcode->flags |= CHDIR_FAILED;
                     // TODO: log, clean up, and continue
                 }
@@ -238,16 +242,20 @@ void* thread_main(void* args) {
                     this_retcode->flags |= spawn_flags;
                 } else {
                     pthread_vector_append(spawned_threads, next_id);
+#if (DEBUG == 1)
                     pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_DEBUG, "Forked new thread (ID: %0lx) at basepath %s\n", SHORT_ID(next_id), current_entry->d_name);
                     pthread_mutex_unlock(this_args->log_lock);
+#endif
                 }
 
 
             } else if (current_entry->d_type == DT_REG) {
+#if (DEBUG == 1)
                 pthread_mutex_lock(this_args->log_lock);
                 LOG(LOG_DEBUG, "Recording file \"%s\" in hashtable.\n", current_entry->d_name);
                 pthread_mutex_unlock(this_args->log_lock);
+#endif
 
                 file_ftagstr = get_ftag(thread_position, thread_mdal, current_entry->d_name);
                 FTAG retrieved_tag = {0};

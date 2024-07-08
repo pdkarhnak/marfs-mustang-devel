@@ -71,6 +71,9 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #define LOG_PREFIX "retcode_ll"
 #include <logging/logging.h>
 
+// A signature for a private function implemented herein.
+void interpret_flags(retcode* current_node);
+
 retcode* node_init(char* new_basepath, RETCODE_FLAGS new_flags) {
     retcode* new_node = calloc(1, sizeof(retcode));
     
@@ -181,6 +184,7 @@ void retcode_ll_flush(retcode_ll* rll, pthread_mutex_t* logfile_lock) {
     do {
         retcode* next_ref = current_node->next;
         LOG(LOG_INFO, "Thread %0lx exited with code %x (was created at basepath: %s)\n", SHORT_ID(current_node->self), current_node->flags, current_node->basepath);
+        interpret_flags(current_node);
         current_node = next_ref;
     } while (current_node != NULL);
 
@@ -195,29 +199,28 @@ void retcode_ll_flush(retcode_ll* rll, pthread_mutex_t* logfile_lock) {
     rll->tail = NULL;
 }
 
+/**
+ * A "private" utility function to translate thread return value flags into 
+ * readable debug messages.
+ *
+ * NOTE: This function is NOT thread-safe, and is primarily intended to be 
+ * called from a context similar to its usage in retcode_ll_flush() where a 
+ * logging lock has already been acquired.
+ */
 void interpret_flags(retcode* current_node) {
     if (current_node->flags & ALLOC_FAILED) {
         LOG(LOG_ERR, "Thread %0lx was unable to allocate memory.\n", SHORT_ID(current_node->self));
     }
 
-    if (current_node->flags & CHILD_ALLOC_FAILED) {
-        LOG(LOG_ERR, "At least one child of thread %0lx was unable to set up and exited.\n", SHORT_ID(current_node->self));
+    if (current_node->flags & OPENDIR_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to open a valid handle for its assigned directory.\n", SHORT_ID(current_node->self));
     }
 
-    if (current_node->flags & FTAG_INIT_FAILED) {
-        LOG(LOG_ERR, "Thread %0lx was unable to initialize an FTAG in at least one case.\n", SHORT_ID(current_node->self));
+    if (current_node->flags & NEW_OPENDIR_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to open a valid handle for at least one subdirectory.\n", SHORT_ID(current_node->self));
     }
 
-    if (current_node->flags & FORTIFYPOS_FAILED) {
-        LOG(LOG_ERR, "Thread %0lx was unable to fortify its position.\n", SHORT_ID(current_node->self));
-    }
-
-    if (current_node->flags & DUPPOS_FAILED) {
-        LOG(LOG_ERR, "Thread %0lx was unable to duplicate its position in at least one case.\n", SHORT_ID(current_node->self));
-    }
-
-    if (current_node->flags & TRAVERSE_FAILED) {
-        LOG(LOG_ERR, "Thread %0lx made at lesat one unsuccessful config_traverse() call.\n", SHORT_ID(current_node->self));
+    if (current_node->flags & CHDIR_FAILED) {
     }
 
     if (current_node->flags & PTHREAD_CREATE_FAILED) {
@@ -228,10 +231,33 @@ void interpret_flags(retcode* current_node) {
         LOG(LOG_ERR, "Thread %0lx failed to join at least one thread.\n", SHORT_ID(current_node->self));
     }
 
+    if (current_node->flags & CHILD_ALLOC_FAILED) {
+        LOG(LOG_ERR, "At least one child of thread %0lx was unable to set up and exited.\n", SHORT_ID(current_node->self));
+    }
+
+    if (current_node->flags & DUPPOS_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to duplicate its position in at least one case.\n", SHORT_ID(current_node->self));
+    }
+
+    if (current_node->flags & TRAVERSE_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx made at lesat one unsuccessful config_traverse() call.\n", SHORT_ID(current_node->self));
+    }
+
+    if (current_node->flags & CLOSEDIR_FAILED) {
+        LOG(LOG_WARNING, "Thread %0lx was unable to close its previously opened directory handle.\n", SHORT_ID(current_node->self));
+    }
+
+    if (current_node->flags & FORTIFYPOS_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to fortify its position.\n", SHORT_ID(current_node->self));
+    }
+
+    if (current_node->flags & FTAG_INIT_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to initialize an FTAG in at least one case.\n", SHORT_ID(current_node->self));
+    }
+
     if (current_node->flags & ABANDONPOS_FAILED) {
         LOG(LOG_ERR, "Thread %0lx was unable to abandon its position.\n", SHORT_ID(current_node->self));
     }
-
 }
 
 void retcode_ll_destroy(retcode_ll* rll) {

@@ -123,9 +123,11 @@ int main(int argc, char** argv) {
  
     // TODO: stat each path to ensure they are directories and not files/other objects
     for (int index = 4; index < argc; index += 1) {
+#if (DEBUG == 1)
         pthread_mutex_lock(&logging_lock);
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
         pthread_mutex_unlock(&logging_lock);
+#endif
 
         struct stat arg_statbuf;
 
@@ -139,16 +141,20 @@ int main(int argc, char** argv) {
         }
 
         if ((arg_statbuf.st_mode & S_IFMT) != S_IFDIR) {
+#if (DEBUG <= 2)
             pthread_mutex_lock(&logging_lock);
             LOG(LOG_WARNING, "Path arg \"%s\" does not target a directory--skipping arg\n", argv[index]);
             pthread_mutex_unlock(&logging_lock);
+#endif
             continue;
         }
 
         marfs_position* child_position = calloc(1, sizeof(marfs_position));
 
         if (config_duplicateposition(&parent_position, child_position)) {
+            pthread_mutex_lock(&logging_lock);
             LOG(LOG_ERR, "Failed to duplicate parent position to child!\n");
+            pthread_mutex_unlock(&logging_lock);
         }
 
         char* next_basepath = strdup(argv[index]);
