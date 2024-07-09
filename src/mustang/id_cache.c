@@ -86,19 +86,26 @@ int id_cache_probe(id_cache* cache, char* searched_id) {
 
     id_cachenode* searched_node = cache->head;
 
-    do {
+    do { 
         if (strncmp(searched_node->id, searched_id, strlen(searched_node->id)) == 0) {
+            // *Only* "reshuffle" the list if the node was found and is not already at 
+            // the head of the cache. If the node was found at the head of the cache, 
+            // the ID the node stored was already the most-recently-used, so the node 
+            // is in proper position since it has been used once again.
             if (searched_node != cache->head) {
-                if (searched_node->next != NULL) {
-                    searched_node->next->prev = searched_node->prev;
-                } 
-                
-                if (searched_node->prev != NULL) {
+                if (searched_node->prev) {
                     searched_node->prev->next = searched_node->next;
                 }
 
-                searched_node->prev = NULL;
+                if (searched_node->next) {
+                    searched_node->next->prev = searched_node->prev;
+                }
+
                 searched_node->next = cache->head;
+
+                if (cache->head != NULL) {
+                    cache->head->prev = searched_node;
+                }
 
                 cache->head = searched_node;
                 update_tail(cache);
@@ -127,19 +134,13 @@ int id_cache_add(id_cache* cache, char* new_id) {
     }
 
     cache->head = added_node;
-
-    // Unconditionally increment size, then clean up to enforce capacity as 
-    // needed.
-    cache->size += 1; 
-
-    // If the cache was empty at the time of this addition, also mark the new 
-    // node as the cache's tail node.
+    cache->size += 1;
     update_tail(cache);
-
 
     if (cache->size > cache->capacity) {
         cachenode_destroy(cache->tail);
         cache->size -= 1;
+        update_tail(cache);
     }
 
     return 0;
