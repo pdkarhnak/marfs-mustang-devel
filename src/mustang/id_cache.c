@@ -1,9 +1,10 @@
 #include "id_cache.h"
+#include <string.h>
 #include <errno.h>
 
 /* Private functions */
 id_cachenode* cachenode_init(char* new_id) {
-    id_cachenode* new_cachenode = (id_cachenode*) calloc(1, sizeof(new_cachenode));
+    id_cachenode* new_cachenode = (id_cachenode*) calloc(1, sizeof(id_cachenode));
 
     if (new_cachenode == NULL) {
         return NULL;
@@ -45,7 +46,7 @@ void cachenode_destroy(id_cachenode* to_destroy) {
 id_cache* id_cache_init(size_t new_capacity) {
     id_cache* new_cache = calloc(1, sizeof(id_cache));
 
-    if (new_capacity == NULL) {
+    if (new_cache == NULL) {
         return NULL;
     }
 
@@ -55,6 +56,23 @@ id_cache* id_cache_init(size_t new_capacity) {
     new_cache->capacity = new_capacity;
 
     return new_cache;
+}
+
+void update_tail(id_cache* cache) {
+    if (cache == NULL) {
+        return;
+    }
+
+    id_cachenode* current_node = cache->head;
+
+    while (current_node != NULL) {
+        if (current_node->next == NULL) {
+            cache->tail = current_node;
+            break;
+        }
+
+        current_node = current_node->next;
+    }
 }
 
 int id_cache_probe(id_cache* cache, char* searched_id) {
@@ -71,13 +89,19 @@ int id_cache_probe(id_cache* cache, char* searched_id) {
     do {
         if (strncmp(searched_node->id, searched_id, strlen(searched_node->id)) == 0) {
             if (searched_node != cache->head) {
-                searched_node->next->prev = searched_node->prev;
-                searched_node->prev->next = searched_node->next;
+                if (searched_node->next != NULL) {
+                    searched_node->next->prev = searched_node->prev;
+                } 
+                
+                if (searched_node->prev != NULL) {
+                    searched_node->prev->next = searched_node->next;
+                }
 
                 searched_node->prev = NULL;
                 searched_node->next = cache->head;
 
                 cache->head = searched_node;
+                update_tail(cache);
             }
 
             return 1;
@@ -97,17 +121,21 @@ int id_cache_add(id_cache* cache, char* new_id) {
     }
 
     added_node->next = cache->head;
-    cache->head = added_node;
 
-    // If the cache was empty at the time of this addition, also mark the new 
-    // node as the cache's tail node.
-    if (cache->size == 0) {
-        cache->tail = added_node;
+    if (cache->head != NULL) {
+        cache->head->prev = added_node;
     }
+
+    cache->head = added_node;
 
     // Unconditionally increment size, then clean up to enforce capacity as 
     // needed.
     cache->size += 1; 
+
+    // If the cache was empty at the time of this addition, also mark the new 
+    // node as the cache's tail node.
+    update_tail(cache);
+
 
     if (cache->size > cache->capacity) {
         cachenode_destroy(cache->tail);
