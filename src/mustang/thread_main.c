@@ -177,6 +177,7 @@ void* thread_main(void* args) {
         struct dirent* current_entry = thread_mdal->readdir(cwd_handle);
 
         char* file_ftagstr = NULL;
+        char* previous_id = NULL;
         char* retrieved_id = NULL;
 
         while (current_entry != NULL) {
@@ -198,14 +199,22 @@ void* thread_main(void* args) {
                 marfs_position* child_position = (marfs_position*) calloc(1, sizeof(marfs_position));
                 if (child_position == NULL) {
                     this_retcode->flags |= ALLOC_FAILED;
-                    // add cleanup logic: close dir handle, etc.
+                    pthread_mutex_lock(this_args->log_lock);
+                    LOG(LOG_ERR, "Failed to allocate space for new child position! (current entry: %s)\n", current_entry->d_name);
+                    pthread_mutex_unlock(this_args->log_lock);
+
                     current_entry = thread_mdal->readdir(cwd_handle);
                     continue;
                 }
 
                 if (config_duplicateposition(thread_position, child_position)) {
-                    this_retcode->flags |= DUPPOS_FAILED; // or something like that
-                    // add cleanup logic: close dir handle, etc.
+                    this_retcode->flags |= DUPPOS_FAILED; 
+                    pthread_mutex_lock(this_args->log_lock);
+                    LOG(LOG_ERR, "Failed to duplicate parent position to child (current entry: %s)\n", current_entry->d_name);
+                    pthread_mutex_unlock(this_args->log_lock);
+
+                    config_abandonposition(child_position);
+                    current_entry = thread_mdal->readdir(cwd_handle);
                     continue;
                 }
 
@@ -214,23 +223,45 @@ void* thread_main(void* args) {
                 int new_depth = config_traverse(this_args->base_config, child_position, &new_basepath, 0);
 
                 if (new_depth < 0) {
+                    this_retcode->flags |= TRAVERSE_FAILED;
+                    pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_ERR, "Failed to traverse to target: \"%s\"\n", current_entry->d_name);
-                    // TODO: log, clean up, and continue
+                    pthread_mutex_unlock(this_args->log_lock);
+
+                    free(new_basepath);
+                    config_abandonposition(child_position);
+                    
+                    current_entry = thread_mdal->readdir(cwd_handle);
+                    continue;
                 }
                 
                 MDAL_DHANDLE next_cwd_handle = thread_mdal->opendir(child_position->ctxt, current_entry->d_name);
 
                 if (next_cwd_handle == NULL) {
-                    // TODO: log, clean up, and continue
                     this_retcode->flags |= NEW_OPENDIR_FAILED;
+                    pthread_mutex_lock(this_args->log_lock);
+                    LOG(LOG_ERR, "Failed to open directory handle for child (%s) (directory: \"%s\")\n", strerror(errno), current_entry->d_name);
+                    pthread_mutex_unlock(this_args->log_lock);
+
+                    free(new_basepath);
+                    config_abandonposition(child_position);
+
+                    current_entry = thread_mdal->readdir(cwd_handle);
+                    continue;
                 }
 
                 if (thread_mdal->chdir(child_position->ctxt, next_cwd_handle)) {
-                    pthread_mutex_lock(this_args->log_lock);
-                    LOG(LOG_ERR, "Failed to chdir to target directory.\n");
-                    pthread_mutex_unlock(this_args->log_lock);
                     this_retcode->flags |= CHDIR_FAILED;
-                    // TODO: log, clean up, and continue
+                    pthread_mutex_lock(this_args->log_lock);
+                    LOG(LOG_ERR, "Failed to chdir to target directory \"%s\" (%s).\n", current_entry->d_name, strerror(errno));
+                    pthread_mutex_unlock(this_args->log_lock);
+
+                    free(new_basepath);
+                    config_abandonposition(child_position);
+                    thread_mdal->closedir(next_cwd_handle);
+
+                    current_entry = thread_mdal->readdir(cwd_handle);
+                    continue;
                 }
 
                 child_position->depth = new_depth;
@@ -272,23 +303,38 @@ void* thread_main(void* args) {
                 ne_erasure placeholder_erasure;
                 ne_location placeholder_location;
 
-                // TODO: implement namecache optimization at some point
                 for (size_t i = objno_min; i <= objno_max; i += 1) {
                     retrieved_tag.objno = i;
                     if (datastream_objtarget(&retrieved_tag, &(thread_position->ns->prepo->datascheme), &retrieved_id, &placeholder_erasure, &placeholder_location)) { 
-                        // TODO: clean up this iteration, readdir, and continue
+                        pthread_mutex_lock(this_args->log_lock);
+                        LOG(LOG_ERR, "Failed to get object ID for chunk %zu of current object \"%s\"\n", i, current_entry->d_name);
+                        pthread_mutex_unlock(this_args->log_lock);
+                        continue;
                     }
 
-                    pthread_mutex_lock(this_args->hashtable_lock);
-                    put(this_args->hashtable, retrieved_id); // put() dupes string into new heap space
-                    pthread_mutex_unlock(this_args->hashtable_lock);
+                    // A small optimization: minimize unnecessary locking by simply ignoring known duplicate object IDs
+                    // and not attempting to add them to the hashtable again.
+                    if ((previous_id == NULL) || strcmp(retrieved_id, previous_id)) {
+                        pthread_mutex_lock(this_args->hashtable_lock);
+                        put(this_args->hashtable, retrieved_id); // put() dupes string into new heap space
+                        pthread_mutex_unlock(this_args->hashtable_lock);
+                    }
+
+                    if (previous_id != NULL) {
+                        free(previous_id);
+                    }
+
+                    // Effectively "shuffle" the most recently retrieved ID to the previous_id variable, 
+                    // allowing the most recently retrieved ID to be "cached" and compared on future ID 
+                    // getting operations
+                    previous_id = retrieved_id;
+                    retrieved_id = NULL; // make ptr NULL to better discard stale reference
                 }
 
                 ftag_cleanup(&retrieved_tag); // free internal allocated memory for FTAG's ctag and streamid fields
                 free(file_ftagstr);
                 file_ftagstr = NULL; // discard stale reference to FTAG to prevent double-free
-                free(retrieved_id); // original string can be freed since data has been separately copied to hashtable
-                retrieved_id = NULL; // make ptr NULL to better discard stale reference
+
             }
 
             current_entry = thread_mdal->readdir(cwd_handle);
@@ -306,6 +352,12 @@ void* thread_main(void* args) {
         if (retrieved_id != NULL) {
             free(retrieved_id);
             retrieved_id = NULL;
+        }
+
+        // This cleanup should always occur after any usage 
+        if (previous_id != NULL) {
+            free(previous_id);
+            previous_id = NULL;
         }
 
     }
@@ -351,9 +403,12 @@ void* thread_main(void* args) {
         this_retcode->flags |= ABANDONPOS_FAILED;
     }
 
+    // config_abandonposition() (wrapped by threadarg_destroy()) does not free
+    // corresponding heap allocation, so that must be done manually
+    free(thread_position);
+    thread_position = NULL;
     retcode_ll_add(this_ll, this_retcode);
 
-    thread_position = NULL;
 
     return (void*) this_ll;
 

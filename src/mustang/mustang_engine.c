@@ -67,14 +67,14 @@ int main(int argc, char** argv) {
         int log_fd = open(argv[3], O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
         if (dup2(log_fd, STDOUT_FILENO) == -1) {
-            LOG(LOG_ERR, "Failed to redirect stdout to log file fd (%s)\n", strerror(errno));
+            LOG(LOG_ERR, "Failed to redirect stdout to log file fd! (%s)\n", strerror(errno));
             fclose(output_ptr);
             close(log_fd);
             return 1;
         }
         
         if (dup2(log_fd, STDERR_FILENO) == -1) {
-            LOG(LOG_ERR, "Failed to redirect stderr to logfile fd (%s)\n", strerror(errno));
+            LOG(LOG_ERR, "Failed to redirect stderr to log file fd! (%s)\n", strerror(errno));
             fclose(output_ptr);
             close(log_fd);
             return 1;
@@ -121,7 +121,6 @@ int main(int argc, char** argv) {
         return 1;
     }
  
-    // TODO: stat each path to ensure they are directories and not files/other objects
     for (int index = 4; index < argc; index += 1) {
 #if (DEBUG == 1)
         pthread_mutex_lock(&logging_lock);
@@ -135,7 +134,7 @@ int main(int argc, char** argv) {
 
         if (statcode) {
             pthread_mutex_lock(&logging_lock);
-            LOG(LOG_ERR, "Failed to stat path arg \"%s\" (%s)\n", argv[index], strerror(errno));
+            LOG(LOG_ERR, "Failed to stat path arg \"%s\" (%s)--skipping to next\n", argv[index], strerror(errno));
             pthread_mutex_unlock(&logging_lock);
             continue;
         }
@@ -143,7 +142,7 @@ int main(int argc, char** argv) {
         if ((arg_statbuf.st_mode & S_IFMT) != S_IFDIR) {
 #if (DEBUG <= 2)
             pthread_mutex_lock(&logging_lock);
-            LOG(LOG_WARNING, "Path arg \"%s\" does not target a directory--skipping arg\n", argv[index]);
+            LOG(LOG_WARNING, "Path arg \"%s\" does not target a directory--skipping to next\n", argv[index]);
             pthread_mutex_unlock(&logging_lock);
 #endif
             continue;
