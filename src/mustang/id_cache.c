@@ -10,6 +10,9 @@ id_cache* id_cache_init(size_t new_capacity) {
     }
 
     new_cache->capacity = new_capacity;
+    new_cache->size = 0;
+    new_cache->head = NULL;
+    new_cache->tail = NULL;
 
     return new_cache;
 }
