@@ -56,7 +56,8 @@ int id_cache_probe(id_cache* cache, char* searched_id) {
 
     while (searched_node != NULL) {
         if (strncmp(searched_node->id, searched_id, strlen(searched_node->id)) == 0) {
-            pluck_node(searched_node);
+            pluck_node(cache, searched_node);
+            update_tail(cache);
             return 1;
         }
 
@@ -141,5 +142,6 @@ void pluck_node(id_cache* cache, id_cachenode* node) {
 
     node->prev = NULL;
     node->next = cache->head;
+    cache->head->prev = node;
     cache->head = node;
 }
