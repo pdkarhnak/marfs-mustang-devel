@@ -52,6 +52,16 @@ int id_cache_add(id_cache* cache, char* new_id) {
 }
 
 int id_cache_probe(id_cache* cache, char* searched_id) {
+    id_cachenode* searched_node = cache->head;
+
+    while (searched_node != NULL) {
+        if (strncmp(searched_node->id, searched_id, strlen(searched_node->id)) == 0) {
+            return 1;
+        }
+
+        searched_node = searched_node->next;
+    }
+
     return 0;
 }
 
