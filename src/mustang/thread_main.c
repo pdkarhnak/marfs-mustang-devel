@@ -81,7 +81,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #define LOG_PREFIX "thread_main"
 #include <logging/logging.h>
 
-extern size_t id_cache_capacity;
+extern const size_t id_cache_capacity;
 
 void* thread_main(void* args) {
     errno = 0; // Since errno not guaranteed to be zero-initialized
@@ -90,8 +90,9 @@ void* thread_main(void* args) {
 
     retcode* this_retcode = node_init(this_args->basepath, RETCODE_SUCCESS);
     retcode_ll* this_ll = retcode_ll_init();
+    id_cache* this_id_cache = id_cache_init(id_cache_capacity);
 
-    if ((this_retcode) == NULL || (this_ll == NULL)) {
+    if ((this_retcode) == NULL || (this_ll == NULL) || (this_id_cache == NULL)) {
         threadarg_destroy(this_args);
         return NULL; // Will be interpreted as flag CHILD_ALLOC_FAILED
     }
@@ -179,7 +180,6 @@ void* thread_main(void* args) {
         struct dirent* current_entry = thread_mdal->readdir(cwd_handle);
 
         char* file_ftagstr = NULL;
-        char* previous_id = NULL;
         char* retrieved_id = NULL;
 
         while (current_entry != NULL) {
@@ -315,21 +315,15 @@ void* thread_main(void* args) {
                     }
 
                     // A small optimization: minimize unnecessary locking by simply ignoring known duplicate object IDs
-                    // and not attempting to add them to the hashtable again.
-                    if ((previous_id == NULL) || strcmp(retrieved_id, previous_id)) {
+                    // and not attempting to add them to the hashtable again.                    
+                    if (id_cache_probe(this_id_cache, retrieved_id) == 0) {
+                        id_cache_add(this_id_cache, retrieved_id);
                         pthread_mutex_lock(this_args->hashtable_lock);
                         put(this_args->hashtable, retrieved_id); // put() dupes string into new heap space
                         pthread_mutex_unlock(this_args->hashtable_lock);
+
                     }
 
-                    if (previous_id != NULL) {
-                        free(previous_id);
-                    }
-
-                    // Effectively "shuffle" the most recently retrieved ID to the previous_id variable, 
-                    // allowing the most recently retrieved ID to be "cached" and compared on future ID 
-                    // getting operations
-                    previous_id = retrieved_id;
                     retrieved_id = NULL; // make ptr NULL to better discard stale reference
                 }
 
@@ -354,12 +348,6 @@ void* thread_main(void* args) {
         if (retrieved_id != NULL) {
             free(retrieved_id);
             retrieved_id = NULL;
-        }
-
-        // This cleanup should always occur after any usage 
-        if (previous_id != NULL) {
-            free(previous_id);
-            previous_id = NULL;
         }
 
     }
