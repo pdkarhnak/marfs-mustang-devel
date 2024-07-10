@@ -29,7 +29,7 @@ mustang_engine: mustang_engine.c thread_main.o libmustang.a
 # mustang engine relies on. mustang *must* still be invoked via the
 # mustang_engine executable and/or via its "mustang" frontend---use in other
 # applications by simply linking against the static library is insufficient
-libmustang.a: pthread_vector.o mustang_threading.o hashtable.o retcode_ll.o 
+libmustang.a: pthread_vector.o mustang_threading.o hashtable.o retcode_ll.o id_cache.o
 	ar rcs $@ $^
 
 # thread_main and retcode_ll (specifically retcode_ll_flush) need to link 

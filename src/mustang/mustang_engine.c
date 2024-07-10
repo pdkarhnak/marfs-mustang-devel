@@ -26,13 +26,14 @@
 #include "retcode_ll.h"
 
 extern void* thread_main(void* args);
+size_t id_cache_capacity;
 
 int main(int argc, char** argv) {
 
     errno = 0; // to guarantee an initially successful context and avoid "false positive" errno settings (errno not guaranteed to be initialized)
 
-    if (argc < 4) {
-        printf("USAGE: ./mustang-engine [capacity exponent] [output file] [log file] [paths, ...]\n");
+    if (argc < 5) {
+        printf("USAGE: ./mustang-engine [hashtable capacity exponent] [cache capacity] [output file] [log file] [paths, ...]\n");
         printf("\tHINT: see mustang wrapper or invoke \"mustang -h\" for more details.\n");
         return 1;
     } 
@@ -50,12 +51,24 @@ int main(int argc, char** argv) {
     computed_capacity <<= capacity_power;
 
     if (capacity_power < 5) {
-        LOG(LOG_WARNING, "Provided hashtable argument \"%s\" will result in very small capacity %zu\n", argv[1], computed_capacity);
+        LOG(LOG_WARNING, "Provided hashtable capacity argument \"%s\" will result in very small capacity %zu\n", argv[1], computed_capacity);
     } else if (capacity_power >= 33) {
-        LOG(LOG_WARNING, "Provided hashtable argument \"%s\" will result in very large capacity %zu\n", argv[1], computed_capacity);
+        LOG(LOG_WARNING, "Provided hashtable capacity argument \"%s\" will result in very large capacity %zu\n", argv[1], computed_capacity);
     }
 
-    FILE* output_ptr = fopen(argv[2], "w");
+    invalid = NULL;
+    id_cache_capacity = (size_t) strtol(argv[2], &invalid, 10);
+
+    if ((id_cache_capacity <= 0) || (errno == EINVAL) || (*invalid != '\0')) {
+        LOG(LOG_ERR, "Bad cache capacity argument \"%s\" received. Please specify a nonnegative integer (i.e. > 0), then try again.\n", argv[2]);
+        return 1;
+    }
+
+    if (id_cache_capacity > 1024) {
+        LOG(LOG_WARNING, "Provided cache capacity argument will result in large per-thread data structures, which may overwhelm the heap.\n");
+    }
+
+    FILE* output_ptr = fopen(argv[3], "w");
 
     if (output_ptr == NULL) {
         LOG(LOG_ERR, "Failed to open file \"%s\" for writing to output (%s)\n", argv[1], strerror(errno));
@@ -63,7 +76,7 @@ int main(int argc, char** argv) {
     }
 
     // If stdout not being used for logging, redirect stdout and stderr to specified file
-    if (strncmp(argv[3], "stdout", strlen("stdout")) != 0) {
+    if (strncmp(argv[4], "stdout", strlen("stdout")) != 0) {
         int log_fd = open(argv[3], O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
         if (dup2(log_fd, STDOUT_FILENO) == -1) {
@@ -121,7 +134,7 @@ int main(int argc, char** argv) {
         return 1;
     }
  
-    for (int index = 4; index < argc; index += 1) {
+    for (int index = 5; index < argc; index += 1) {
 #if (DEBUG == 1)
         pthread_mutex_lock(&logging_lock);
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);

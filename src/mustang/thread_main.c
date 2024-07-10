@@ -69,6 +69,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include "mustang_threading.h"
 #include "pthread_vector.h"
 #include "retcode_ll.h"
+#include "id_cache.h"
 
 #ifdef DEBUG_MUSTANG
 #define DEBUG DEBUG_MUSTANG
@@ -80,6 +81,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #define LOG_PREFIX "thread_main"
 #include <logging/logging.h>
 
+extern size_t id_cache_capacity;
 
 void* thread_main(void* args) {
     errno = 0; // Since errno not guaranteed to be zero-initialized
