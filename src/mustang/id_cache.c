@@ -25,13 +25,29 @@ id_cache* id_cache_init(size_t new_capacity) {
 }
 
 int id_cache_add(id_cache* cache, char* new_id) {
+    // STUB
+    // TODO: implement full logic to add new node to cache
     id_cachenode* new_node = cachenode_init(new_id);
 
     if (new_node == NULL) {
         return -1;
     }
 
-    return -1;
+    if (cache->size == 0) {
+        cache->head = new_node;
+    } else {
+        new_node->next = cache->head;
+        cache->head->prev = new_node;
+        cache->head = new_node;
+    }
+
+    cache->size += 1;
+
+    if (cache->size > cache->capacity) {
+        return -1;
+    }
+
+    return 0;
 }
 
 int id_cache_probe(id_cache* cache, char* searched_id) {
