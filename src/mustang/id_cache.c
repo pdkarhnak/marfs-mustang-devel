@@ -5,8 +5,8 @@
 // Prototypes for private functions
 id_cachenode* cachenode_init(char* new_id);
 void update_tail(id_cache* cache);
-void pluck_node(id_cache* cache, id_cachenode* node);
 void cachenode_destroy(id_cachenode* node);
+void pluck_node(id_cache* cache, id_cachenode* node);
 
 // Public interface implementation
 id_cache* id_cache_init(size_t new_capacity) {
@@ -25,8 +25,6 @@ id_cache* id_cache_init(size_t new_capacity) {
 }
 
 int id_cache_add(id_cache* cache, char* new_id) {
-    // STUB
-    // TODO: implement full logic to add new node to cache
     id_cachenode* new_node = cachenode_init(new_id);
 
     if (new_node == NULL) {
@@ -42,9 +40,12 @@ int id_cache_add(id_cache* cache, char* new_id) {
     }
 
     cache->size += 1;
+    update_tail(cache);
 
     if (cache->size > cache->capacity) {
-        return -1;
+        cachenode_destroy(cache->tail);
+        cache->size -= 1;
+        update_tail(cache);
     }
 
     return 0;
@@ -75,3 +76,37 @@ id_cachenode* cachenode_init(char* new_id) {
     return new_node;
 }
 
+void update_tail(id_cache* cache) {
+    if (cache == NULL) {
+        return;
+    }
+
+    id_cachenode* current_node = cache->head;
+
+    while (current_node != NULL) {
+        if (current_node->next == NULL) {
+            cache->tail = current_node;
+        }
+
+        current_node = current_node->next;
+    }
+}
+
+void cachenode_destroy(id_cachenode* node) {
+    if (node == NULL) {
+        return;
+    }
+
+    if (node->next != NULL) {
+        node->next->prev = node->prev;
+    }
+
+    if (node->prev != NULL) {
+        node->prev->next = node->next;
+    }
+
+    node->prev = NULL;
+    node->next = NULL;
+    free(node->id);
+    free(node);
+}
