@@ -2,13 +2,13 @@
 #include <string.h>
 #include <errno.h>
 
-// Prototypes for private functions
+/**** Prototypes for private functions ****/
 id_cachenode* cachenode_init(char* new_id);
 void update_tail(id_cache* cache);
 void cachenode_destroy(id_cachenode* node);
 void pluck_node(id_cache* cache, id_cachenode* node);
 
-// Public interface implementation
+/**** Public interface implementation ****/
 id_cache* id_cache_init(size_t new_capacity) {
     id_cache* new_cache = (id_cache*) calloc(1, sizeof(id_cache));
 
@@ -65,6 +65,25 @@ int id_cache_probe(id_cache* cache, char* searched_id) {
     }
 
     return 0;
+}
+
+void id_cache_destroy(id_cache* cache) {
+    if (cache == NULL) {
+        return;
+    }
+
+    id_cachenode* to_destroy = cache->head;
+
+    while (to_destroy != NULL) {
+        id_cachenode* next_node = to_destroy->next;
+        cachenode_destroy(to_destroy);
+        to_destroy = next_node;
+    }
+
+    cache->size = 0;
+    cache->head = NULL;
+    cache->tail = NULL;
+    free(cache);
 }
 
 /**** Private functions ****/
