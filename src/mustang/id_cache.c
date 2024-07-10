@@ -56,6 +56,7 @@ int id_cache_probe(id_cache* cache, char* searched_id) {
 
     while (searched_node != NULL) {
         if (strncmp(searched_node->id, searched_id, strlen(searched_node->id)) == 0) {
+            pluck_node(searched_node);
             return 1;
         }
 
@@ -119,4 +120,26 @@ void cachenode_destroy(id_cachenode* node) {
     node->next = NULL;
     free(node->id);
     free(node);
+}
+
+void pluck_node(id_cache* cache, id_cachenode* node) {
+    if (cache == NULL || node == NULL) {
+        return;
+    }
+
+    if (cache->head == node) {
+        return;
+    }
+
+    if (node->prev != NULL) {
+        node->prev->next = node->next;
+    }
+
+    if (node->next != NULL) {
+        node->next->prev = node->prev;
+    }
+
+    node->prev = NULL;
+    node->next = cache->head;
+    cache->head = node;
 }
