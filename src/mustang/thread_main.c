@@ -324,6 +324,7 @@ void* thread_main(void* args) {
 
                     }
 
+                    free(retrieved_id);
                     retrieved_id = NULL; // make ptr NULL to better discard stale reference
                 }
 
@@ -397,8 +398,8 @@ void* thread_main(void* args) {
     // corresponding heap allocation, so that must be done manually
     free(thread_position);
     thread_position = NULL;
+    id_cache_destroy(this_id_cache);
     retcode_ll_add(this_ll, this_retcode);
-
 
     return (void*) this_ll;
 
