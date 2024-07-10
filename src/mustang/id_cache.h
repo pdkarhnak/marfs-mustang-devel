@@ -29,17 +29,6 @@ typedef struct id_cache_struct {
 id_cache* id_cache_init(size_t new_capacity);
 
 /** 
- * Check an id_cache struct for a node which stores ID `searched_id`. If the ID
- * is stored, silently "bump" the node storing the searched ID to the head of 
- * the cache to indicate that the ID has been the most recently used in the
- * cache.
- *
- * Returns: 1 if a node was found which stored an id matching `stored_id`, or 0
- * if no such node was present.
- */
-int id_cache_probe(id_cache* cache, char* searched_id);
-
-/** 
  * Create a new cache node to store `new_id`, then place that node at the head
  * of the cache to indicate that the `new_id` is the most-recently-used ID in
  * the cache. If the cache is at capacity, silently evict the tail node in the
@@ -49,6 +38,18 @@ int id_cache_probe(id_cache* cache, char* searched_id);
  * modified), or -1 on failure (node could not be allocated).
  */
 int id_cache_add(id_cache* cache, char* new_id);
+
+/** 
+ *
+ * Check an id_cache struct for a node which stores ID `searched_id`. If the ID
+ * is stored, silently "bump" the node storing the searched ID to the head of 
+ * the cache to indicate that the ID has been the most recently used in the
+ * cache.
+ *
+ * Returns: 1 if a node was found which stored an id matching `stored_id`, or 0
+ * if no such node was present.
+ */
+int id_cache_probe(id_cache* cache, char* searched_id);
 
 /**
  * Destroy the given id_cache struct and free the memory associated with it.

@@ -4,7 +4,8 @@
 
 // Prototypes for private functions
 id_cachenode* cachenode_init(char* new_id);
-void pluck_node(id_cachenode* node);
+void update_tail(id_cache* cache);
+void pluck_node(id_cache* cache, id_cachenode* node);
 void cachenode_destroy(id_cachenode* node);
 
 // Public interface implementation
@@ -21,6 +22,10 @@ id_cache* id_cache_init(size_t new_capacity) {
     new_cache->tail = NULL;
 
     return new_cache;
+}
+
+int id_cache_add(id_cache* cache, char* new_id) {
+    return -1;
 }
 
 int id_cache_probe(id_cache* cache, char* searched_id) {
