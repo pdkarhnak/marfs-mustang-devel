@@ -260,8 +260,6 @@ int main(int argc, char** argv) {
 
     pthread_mutex_destroy(&logging_lock);
 
-    fprintf(output_ptr, "Preparing to dump hashtable...\n\n");
-
     pthread_mutex_lock(&ht_lock);
     hashtable_dump(output_table, output_ptr);
     pthread_mutex_unlock(&ht_lock);

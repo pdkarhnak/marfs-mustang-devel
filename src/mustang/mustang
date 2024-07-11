@@ -82,5 +82,10 @@ if __name__ == '__main__':
         print("WARNING: mustang_engine process returned a non-zero exit code. Check logs for more details.")
     except:
         print("Some other error occurred. Please try again.")
-
+    finally:
+        with open(final_handle, 'r') as hashtable:
+            line_count = len(hashtable.readlines())
+            if line_count >= (2**(args.hc)):
+                print("WARNING: The output hashtable was exactly filled to capacity, meaning object IDs may have been lost once all entries in the table were filled.")
+                print(f"If you are concerned about object IDs being lost, you should perform another run with a greater capacity (this run had capacity argument \"{args.hc}\" resulting in {2**(args.hc)} maximum entries).")
 
