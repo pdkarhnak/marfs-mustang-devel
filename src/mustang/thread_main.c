@@ -67,7 +67,6 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <datastream/datastream.h>
 #include <ne/ne.h>
 #include "mustang_threading.h"
-#include "retcode_ll.h"
 #include "id_cache.h"
 
 #ifdef DEBUG_MUSTANG
@@ -89,8 +88,6 @@ void* thread_main(void* args) {
 
     thread_args* this_args = (thread_args*) args;
 
-    retcode* this_retcode = node_init(this_args->basepath, RETCODE_SUCCESS);
-    retcode_ll* this_ll = retcode_ll_init();
     id_cache* this_id_cache = id_cache_init(id_cache_capacity);
 
     if ((this_retcode) == NULL || (this_ll == NULL) || (this_id_cache == NULL)) {
@@ -103,7 +100,6 @@ void* thread_main(void* args) {
     // Attempt to fortify the thread's position (if not already fortified) and check for errors
     if ((thread_position->ctxt == NULL) && config_fortifyposition(thread_position)) {
         this_retcode->flags |= FORTIFYPOS_FAILED;
-        retcode_ll_add(this_ll, this_retcode);
         threadarg_destroy(this_args);
         return (void*) this_ll;
     }
@@ -127,7 +123,6 @@ void* thread_main(void* args) {
 
     if (spawned_threads == NULL) {
         this_retcode->flags |= ALLOC_FAILED;
-        retcode_ll_add(this_ll, this_retcode);
         thread_mdal->close(cwd_handle);
         threadarg_destroy(this_args);
         return (void*) this_ll;
@@ -170,6 +165,7 @@ void* thread_main(void* args) {
                     // TODO: increment the number of threads successfully spawned to prepare a countdown monitor windup
                 }
             }
+            // TODO: make a call to countdown_monitor_windup() here
         }
     }
 
@@ -316,9 +312,9 @@ void* thread_main(void* args) {
                     // and not attempting to add them to the hashtable again.                    
                     if (id_cache_probe(this_id_cache, retrieved_id) == 0) {
                         id_cache_add(this_id_cache, retrieved_id);
-                        pthread_mutex_lock(this_args->hashtable_lock);
+                        pthread_rwlock_wrlock(this_args->hashtable_lock);
                         put(this_args->hashtable, retrieved_id); // put() dupes string into new heap space
-                        pthread_mutex_unlock(this_args->hashtable_lock);
+                        pthread_rwlock_unlock(this_args->hashtable_lock);
 
                     }
 
@@ -351,42 +347,11 @@ void* thread_main(void* args) {
 
     }
 
-    pthread_t to_join;
-
-    for (int thread_index = 0; thread_index < spawned_threads->size; thread_index += 1) {
-
-        int findcode = at_index(spawned_threads, thread_index, &to_join);
-
-        if (findcode == -1) {
-            continue;
-        }
-
-        retcode_ll* joined_ll; 
-        int joincode = pthread_join(to_join, (void**) &joined_ll);
-
-        if (joincode != 0) {
-            this_retcode->flags |= PTHREAD_JOIN_FAILED;
-            continue;
-        }
-
-        if (joined_ll == NULL) {
-            this_retcode->flags |= CHILD_ALLOC_FAILED;
-            continue;
-        }
-
-        this_ll = retcode_ll_concat(this_ll, joined_ll);
-
-        if (this_ll->size >= RC_LL_LEN_MAX) {
-            retcode_ll_flush(this_ll, this_args->log_lock);
-        }
-
-    }
-
     if (thread_mdal->closedir(cwd_handle)) {
         this_retcode->flags |= CLOSEDIR_FAILED;
     }
 
-    if(threadarg_destroy(this_args)) {
+    if (threadarg_destroy(this_args)) {
         this_retcode->flags |= ABANDONPOS_FAILED;
     }
 
@@ -395,7 +360,6 @@ void* thread_main(void* args) {
     free(thread_position);
     thread_position = NULL;
     id_cache_destroy(this_id_cache);
-    retcode_ll_add(this_ll, this_retcode);
 
     return (void*) this_ll;
 
