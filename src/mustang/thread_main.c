@@ -92,8 +92,6 @@ void* thread_main(void* args) {
 
     thread_args* this_args = (thread_args*) args;
 
-    // TODO: read out thread monitor and countdown monitor from args
-
     // TODO: check error code
     monitor_procure(this_args->active_threads_mtr);
     countdown_monitor_t* countdown_mtr = this_args->live_threads_mtr;

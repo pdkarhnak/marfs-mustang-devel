@@ -13,12 +13,14 @@ default_logname = f"mustang-run-{startup_timestamp.year}{startup_timestamp.month
 parser = argparse.ArgumentParser(prog='mustang', description='Parse command-line arguments as a wrapper for the mustang_engine binary.')
 parser.add_argument("-p", "--paths", required=True, nargs='+', metavar='PATH', 
         help='One or more POSIX-like paths to recursively traverse within a MarFS instance and catalog objects along.')
-parser.add_argument("-o", "--output", required=False, type=str, nargs='?', default=default_filename, metavar="FILE", 
+parser.add_argument("-o", "--output", required=False, type=str, nargs=1, default=default_filename, metavar="FILE", 
         help='Output file where names of catalogged objects (as maintained in the program\'s hashtable) will be written.')
-parser.add_argument("-hc", "--hc", "--hashtable-capacity", required=False, type=int, nargs='?', default=16, choices=range(1, 64), metavar="PWR", 
+parser.add_argument("-hc", "--hc", "--hashtable-capacity", required=False, type=int, nargs=1, default=16, choices=range(1, 64), metavar="PWR", 
         help='Power of 2 determining output capacity (e.g., default 16 -> 2^16 -> capacity = 65536).')
-parser.add_argument("-cc", "--cc", "--cache-capacity", "--id-cache-capacity", required=False, type=int, nargs='?', default=16, metavar="CAPACITY", 
+parser.add_argument("-cc", "--cc", "--cache-capacity", "--id-cache-capacity", required=False, type=int, nargs=1, default=16, metavar="CAPACITY", 
         help='Maximum number of unique MarFS object IDs that will be \"cached\" at one time in per-thread data structures (default: 16).') 
+parser.add_argument("-t", "--threads-max", required=False, type=int, nargs=1, default=128, metavar = "THREADS",
+        help='Maximum number of threads that will be allowed to traverse directories at one time.')
 
 logging_group = parser.add_mutually_exclusive_group()
 logging_group.add_argument("-l", "--logfile", "--log-file", required=False, type=str, nargs='?', default=default_logname, metavar="LOGFILE",
@@ -34,6 +36,7 @@ if __name__ == '__main__':
         exit(1)
 
     engine_args = ["mustang_engine"]
+    engine_args.append(str(args.threads_max))
     engine_args.append(str(args.hc))
     engine_args.append(str(args.cc))
 

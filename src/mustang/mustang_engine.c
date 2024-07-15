@@ -29,6 +29,9 @@ size_t id_cache_capacity;
 
 int main(int argc, char** argv) {
 
+    // TODO: update arg indices.
+    // Max threads is argv[1] now, so shift everything else "back" in index by one
+
     errno = 0; // to guarantee an initially successful context and avoid "false positive" errno settings (errno not guaranteed to be initialized)
 
     if (argc < 5) {
