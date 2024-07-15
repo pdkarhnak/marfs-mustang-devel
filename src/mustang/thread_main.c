@@ -82,6 +82,9 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 
 extern const size_t id_cache_capacity;
 
+// Private function prototype implemented herein
+void interpret_flags(RETCODE_FLAGS flags);
+
 void* thread_main(void* args) {
     errno = 0; // Since errno not guaranteed to be zero-initialized
 
@@ -372,3 +375,61 @@ void* thread_main(void* args) {
     return (void*) this_ll;
 
 }
+
+/**
+ * A "private" utility function to translate thread return value flags into 
+ * readable debug messages.
+ */
+void interpret_flags(RETCODE_FLAGS flags) {
+    if (flags & ALLOC_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to allocate memory.\n", SHORT_ID(current_node->self));
+    }
+
+    if (flags & OPENDIR_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to open a valid handle for its assigned directory.\n", SHORT_ID(current_node->self));
+    }
+
+    if (flags & NEW_OPENDIR_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to open a valid handle for at least one subdirectory.\n", SHORT_ID(current_node->self));
+    }
+
+    if (flags & CHDIR_FAILED) {
+    }
+
+    if (flags & PTHREAD_CREATE_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx had at least one pthread_create() call fail.\n", SHORT_ID(current_node->self));
+    }
+
+    if (flags & PTHREAD_JOIN_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx failed to join at least one thread.\n", SHORT_ID(current_node->self));
+    }
+
+    if (flags & CHILD_ALLOC_FAILED) {
+        LOG(LOG_ERR, "At least one child of thread %0lx was unable to set up and exited.\n", SHORT_ID(current_node->self));
+    }
+
+    if (flags & DUPPOS_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to duplicate its position in at least one case.\n", SHORT_ID(current_node->self));
+    }
+
+    if (flags & TRAVERSE_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx made at lesat one unsuccessful config_traverse() call.\n", SHORT_ID(current_node->self));
+    }
+
+    if (flags & CLOSEDIR_FAILED) {
+        LOG(LOG_WARNING, "Thread %0lx was unable to close its previously opened directory handle.\n", SHORT_ID(current_node->self));
+    }
+
+    if (flags & FORTIFYPOS_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to fortify its position.\n", SHORT_ID(current_node->self));
+    }
+
+    if (flags & FTAG_INIT_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to initialize an FTAG in at least one case.\n", SHORT_ID(current_node->self));
+    }
+
+    if (flags & ABANDONPOS_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to abandon its position.\n", SHORT_ID(current_node->self));
+    }
+}
+
