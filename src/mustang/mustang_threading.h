@@ -72,6 +72,27 @@ extern void* thread_main(void* args);
 typedef struct thread_args_struct thread_args;
 
 typedef struct thread_args_struct {
+    /**
+     * A monitor to synchronize the number of active threads 
+     * (i.e., the number of threads which are currently traversing directories)
+     *
+     * NOTE: for exclusive use of "child threads" (i.e., all threads other 
+     * than the one that runs main() in mustang_engine.c)
+     */
+    mustang_monitor_t* active_threads_mtr; 
+
+    /** 
+     * A monitor to synchronize the number of total threads in current use.
+     *
+     * This includes not only active threads, which are recorded using the
+     * active threads monitor, but also "inactive" threads which have been
+     * created and will traverse a directory at some point in the future but 
+     * which are waiting on the active threads monitor at the current time.
+     *
+     * NOTE: for parent-child synchronization, parent must let "child threads"
+     * modify the monitor value by waiting and signaling. The parent 
+     */
+    countdown_monitor_t* live_threads_mtr;
 
     // MarFS context components for this thread: position and config
     marfs_config* base_config;
@@ -79,7 +100,7 @@ typedef struct thread_args_struct {
 
     // Synchronization for the output hashtable of object names
     hashtable* hashtable;
-    pthread_mutex_t* hashtable_lock;
+    pthread_rwlock_t* hashtable_lock;
 
     // After a verify_active_threads() call to put the thread to sleep as
     // needed until room is available, This will be the path that the new
@@ -87,7 +108,6 @@ typedef struct thread_args_struct {
     char* basepath; 
 
     pthread_mutex_t* log_lock;
-
 
 } thread_args;
 

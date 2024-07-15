@@ -22,7 +22,6 @@
 
 #include "hashtable.h"
 #include "mustang_threading.h"
-#include "pthread_vector.h"
 #include "retcode_ll.h"
 
 extern void* thread_main(void* args);
@@ -103,13 +102,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    pthread_mutex_t ht_lock = PTHREAD_MUTEX_INITIALIZER;
+    pthread_rwlock_t ht_lock = PTHREAD_RWLOCK_INITIALIZER;
 
     // For debugging
-    pthread_mutex_t logging_lock;
-    pthread_mutex_init(&logging_lock, NULL);
-
-    pthread_vector* top_threads = pthread_vector_init(DEFAULT_CAPACITY);
+    pthread_mutex_t logging_lock = PTHREAD_MUTEX_INITIALIZER;
 
     char* config_path = getenv("MARFS_CONFIG_PATH");
 
@@ -210,7 +206,6 @@ int main(int argc, char** argv) {
 
         pthread_t next_id;
         pthread_create(&next_id, NULL, &thread_main, (void*) topdir_args);
-        pthread_vector_append(top_threads, next_id);
 
         pthread_mutex_lock(&logging_lock);
         LOG(LOG_INFO, "Created top-level thread with ID: %0lx and basepath \"%s\"\n", SHORT_ID(next_id), next_basepath);
@@ -260,17 +255,15 @@ int main(int argc, char** argv) {
 
     pthread_mutex_destroy(&logging_lock);
 
-    pthread_mutex_lock(&ht_lock);
+    pthread_rwlock_rdlock(&ht_lock);
     hashtable_dump(output_table, output_ptr);
-    pthread_mutex_unlock(&ht_lock);
+    pthread_rwlock_unlock(&ht_lock);
 
     if (fclose(output_ptr)) {
         LOG(LOG_WARNING, "Failed to close output file pointer! (%s)\n", strerror(errno));
     }
 
-    pthread_vector_destroy(top_threads);
     hashtable_destroy(output_table);
-    pthread_mutex_destroy(&ht_lock);
 
     if (config_abandonposition(&parent_position)) {
         LOG(LOG_WARNING, "Failed to abandon parent position!\n");

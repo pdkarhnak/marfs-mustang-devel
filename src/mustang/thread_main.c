@@ -67,7 +67,6 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <datastream/datastream.h>
 #include <ne/ne.h>
 #include "mustang_threading.h"
-#include "pthread_vector.h"
 #include "retcode_ll.h"
 #include "id_cache.h"
 
@@ -85,6 +84,8 @@ extern const size_t id_cache_capacity;
 
 void* thread_main(void* args) {
     errno = 0; // Since errno not guaranteed to be zero-initialized
+
+    pthread_detach(pthread_self()); // TODO: add proper infrastructure to accommodate detached thread approach
 
     thread_args* this_args = (thread_args*) args;
 
@@ -123,8 +124,6 @@ void* thread_main(void* args) {
         this_retcode->flags |= OPENDIR_FAILED;
         cwd_ok = 0;
     }
-
-    pthread_vector* spawned_threads = pthread_vector_init(DEFAULT_CAPACITY);
 
     if (spawned_threads == NULL) {
         this_retcode->flags |= ALLOC_FAILED;
@@ -168,7 +167,7 @@ void* thread_main(void* args) {
                 if (ns_spawn_flags != RETCODE_SUCCESS) {
                     this_retcode->flags |= ns_spawn_flags;
                 } else {
-                    pthread_vector_append(spawned_threads, next_ns_thread);
+                    // TODO: increment the number of threads successfully spawned to prepare a countdown monitor windup
                 }
             }
         }
@@ -274,14 +273,13 @@ void* thread_main(void* args) {
                 if (spawn_flags != RETCODE_SUCCESS) {
                     this_retcode->flags |= spawn_flags;
                 } else {
-                    pthread_vector_append(spawned_threads, next_id);
+                    // TODO: increment the number of active threads to prepare a countdown monitor windup call
 #if (DEBUG == 1)
                     pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_DEBUG, "Forked new thread (ID: %0lx) at basepath %s\n", SHORT_ID(next_id), current_entry->d_name);
                     pthread_mutex_unlock(this_args->log_lock);
 #endif
                 }
-
 
             } else if (current_entry->d_type == DT_REG) {
 #if (DEBUG == 1)
@@ -387,8 +385,6 @@ void* thread_main(void* args) {
     if (thread_mdal->closedir(cwd_handle)) {
         this_retcode->flags |= CLOSEDIR_FAILED;
     }
-
-    pthread_vector_destroy(spawned_threads);
 
     if(threadarg_destroy(this_args)) {
         this_retcode->flags |= ABANDONPOS_FAILED;
