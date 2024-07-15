@@ -65,7 +65,8 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <config/config.h>
 #include <mdal/mdal.h>
 #include "hashtable.h"
-#include "retcode_ll.h"
+#include "mustang_retcode.h"
+#include "mustang_monitors.h"
 
 extern void* thread_main(void* args);
 
@@ -120,7 +121,7 @@ typedef struct thread_args_struct {
  * threads besides the top-level thread.
  */
 thread_args* threadarg_init(marfs_config* shared_config, marfs_position* shared_position, hashtable* new_hashtable, 
-        pthread_mutex_t* new_ht_lock, char* new_basepath, pthread_mutex_t* new_log_lock);
+        pthread_rwlock_t* new_ht_lock, char* new_basepath, pthread_mutex_t* new_log_lock);
 
 /** 
  * Given a thread's arguments and new inputs for thread marfs_position and

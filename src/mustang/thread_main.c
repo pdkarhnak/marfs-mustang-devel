@@ -94,7 +94,9 @@ void* thread_main(void* args) {
 
     // TODO: read out thread monitor and countdown monitor from args
 
-    // TODO: procure thread monitor
+    // TODO: check error code
+    monitor_procure(this_args->active_threads_mtr);
+    countdown_monitor_t* countdown_mtr = this_args->live_threads_mtr;
 
     id_cache* this_id_cache = id_cache_init(id_cache_capacity);
 
@@ -142,6 +144,8 @@ void* thread_main(void* args) {
         // check reference chase for position struct's corresponding namespace (and list of subspaces within namespace)
         /* thread_position->ns->subnodes */
         if (thread_position->ns->subnodes) {
+            ssize_t successful_spawns = 0;
+
             for (size_t subnode_index = 0; subnode_index < thread_position->ns->subnodecount; subnode_index += 1) {
                 HASH_NODE current_subnode = (thread_position->ns->subnodes)[subnode_index];
 
@@ -172,10 +176,11 @@ void* thread_main(void* args) {
                 if (ns_spawn_flags != RETCODE_SUCCESS) {
                     this_flags |= ns_spawn_flags;
                 } else {
-                    // TODO: increment the number of threads successfully spawned to prepare a countdown monitor windup
+                    successful_spawns += 1;
                 }
             }
-            // TODO: make a call to countdown_monitor_windup() here
+
+            countdown_monitor_windup(countdown_mtr, successful_spawns);
         }
     }
 
@@ -186,6 +191,8 @@ void* thread_main(void* args) {
 
         char* file_ftagstr = NULL;
         char* retrieved_id = NULL;
+
+        ssize_t successful_subdir_spawns = 0;
 
         while (current_entry != NULL) {
             // Ignore dirents corresponding to "invalid" paths (reference tree,
@@ -279,7 +286,7 @@ void* thread_main(void* args) {
                 if (spawn_flags != RETCODE_SUCCESS) {
                     this_flags |= spawn_flags;
                 } else {
-                    // TODO: increment the number of active threads to prepare a countdown monitor windup call
+                    successful_subdir_spawns += 1;
 #if (DEBUG == 1)
                     pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_DEBUG, "Forked new thread (ID: %0lx) at basepath %s\n", SHORT_ID(next_id), current_entry->d_name);
@@ -340,6 +347,8 @@ void* thread_main(void* args) {
             current_entry = thread_mdal->readdir(cwd_handle);
         }
 
+        countdown_monitor_windup(countdown_mtr, successful_subdir_spawns);
+
         /* --- begin join and cleanup --- */
 
         // if FTAG cleanup somehow failed, ensure cleanup instead occurs here
@@ -360,11 +369,15 @@ void* thread_main(void* args) {
         this_flags |= CLOSEDIR_FAILED;
     }
 
+    countdown_monitor_decrement(countdown_mtr);
+
+    // TODO: add signal/decrement calls to regular monitor and countdown monitor
+    // TODO: check error code
+    monitor_vend(this_args->active_threads_mtr);
+
     if (threadarg_destroy(this_args)) {
         this_flags |= ABANDONPOS_FAILED;
     }
-
-    // TODO: add signal/decrement calls to regular monitor and countdown monitor
 
     // config_abandonposition() (wrapped by threadarg_destroy()) does not free
     // corresponding heap allocation, so that must be done manually
@@ -372,7 +385,7 @@ void* thread_main(void* args) {
     thread_position = NULL;
     id_cache_destroy(this_id_cache);
 
-    return (void*) this_ll;
+    return NULL;
 
 }
 

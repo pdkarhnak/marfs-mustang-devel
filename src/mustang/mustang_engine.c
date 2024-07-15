@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
     char* invalid = NULL;
     size_t capacity_power = (size_t) strtol(argv[1], &invalid, 10);
 
-    if ( ((capacity_power <= 0) || (capacity_power >= 64)) || 
+    if ((capacity_power <= 0) || (capacity_power >= 64) || 
             (errno == EINVAL) || (*invalid != '\0')) {
         LOG(LOG_ERR, "Bad hashtable capacity argument \"%s\" received. Please specify a positive integer between 1 and 64, then try again.\n", argv[1]);
         return 1;
@@ -130,6 +130,8 @@ int main(int argc, char** argv) {
         return 1;
     }
  
+    ssize_t successful_spawns = 0;
+
     for (int index = 5; index < argc; index += 1) {
 #if (DEBUG == 1)
         pthread_mutex_lock(&logging_lock);
@@ -205,54 +207,18 @@ int main(int argc, char** argv) {
         thread_args* topdir_args = threadarg_init(parent_config, child_position, output_table, &ht_lock, next_basepath, &logging_lock);
 
         pthread_t next_id;
-        pthread_create(&next_id, NULL, &thread_main, (void*) topdir_args);
+        
+        if (pthread_create(&next_id, NULL, &thread_main, (void*) topdir_args) == 0) {
+            successful_spawns += 1; // TODO: unite error-handling code into separate branch of this if statement
+        }
 
         pthread_mutex_lock(&logging_lock);
         LOG(LOG_INFO, "Created top-level thread with ID: %0lx and basepath \"%s\"\n", SHORT_ID(next_id), next_basepath);
         pthread_mutex_unlock(&logging_lock);
     }
+
+    countdown_monitor_windup(/* TODO: put monitor pointer here after allocating */, successful_spawns);
  
-    pthread_t join_id;
-
-    retcode_ll* parent_ll = retcode_ll_init();
-
-    retcode_ll* joined_ll;
-
-    for (int index = 0; index < top_threads->size; index += 1) {
-        int findcode = at_index(top_threads, index, &join_id);
-
-        if (findcode == -1) {
-            // TODO: log
-            continue;
-        }
-
-        int joincode = pthread_join(join_id, (void**) &joined_ll);
-
-        if (joincode != 0) {
-            pthread_mutex_lock(&logging_lock);
-            LOG(LOG_ERR, "Failed to join child thread (child ID: %0lx)\n", SHORT_ID(join_id));
-            pthread_mutex_unlock(&logging_lock);
-            continue;
-        }
-
-        if (joined_ll == NULL) {
-            pthread_mutex_lock(&logging_lock);
-            LOG(LOG_ERR, "Child thread (ID: %0lx) returned NULL -- was unable to allocte memory.\n", SHORT_ID(join_id));
-            pthread_mutex_unlock(&logging_lock);
-            continue;
-        }
-
-        parent_ll = retcode_ll_concat(parent_ll, joined_ll);
-
-        if (parent_ll->size >= RC_LL_LEN_MAX) {
-            retcode_ll_flush(parent_ll, &logging_lock);    
-        }
-
-    }
-
-    retcode_ll_flush(parent_ll, &logging_lock);
-    retcode_ll_destroy(parent_ll);
-
     pthread_mutex_destroy(&logging_lock);
 
     pthread_rwlock_rdlock(&ht_lock);
