@@ -67,6 +67,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <datastream/datastream.h>
 #include <ne/ne.h>
 #include "mustang_threading.h"
+#include "mustang_retcode.h"
 #include "id_cache.h"
 
 #ifdef DEBUG_MUSTANG
@@ -88,7 +89,13 @@ void* thread_main(void* args) {
 
     thread_args* this_args = (thread_args*) args;
 
+    // TODO: read out thread monitor and countdown monitor from args
+
+    // TODO: procure thread monitor
+
     id_cache* this_id_cache = id_cache_init(id_cache_capacity);
+
+    RETCODE_FLAGS this_flags = RETCODE_SUCCESS;
 
     if ((this_retcode) == NULL || (this_ll == NULL) || (this_id_cache == NULL)) {
         threadarg_destroy(this_args);
@@ -99,7 +106,7 @@ void* thread_main(void* args) {
 
     // Attempt to fortify the thread's position (if not already fortified) and check for errors
     if ((thread_position->ctxt == NULL) && config_fortifyposition(thread_position)) {
-        this_retcode->flags |= FORTIFYPOS_FAILED;
+        this_flags |= FORTIFYPOS_FAILED;
         threadarg_destroy(this_args);
         return (void*) this_ll;
     }
@@ -117,12 +124,12 @@ void* thread_main(void* args) {
         pthread_mutex_lock(this_args->log_lock);
         LOG(LOG_ERR, "Failed to open current directory for reading (%s)\n", strerror(errno));
         pthread_mutex_unlock(this_args->log_lock);
-        this_retcode->flags |= OPENDIR_FAILED;
+        this_flags |= OPENDIR_FAILED;
         cwd_ok = 0;
     }
 
     if (spawned_threads == NULL) {
-        this_retcode->flags |= ALLOC_FAILED;
+        this_flags |= ALLOC_FAILED;
         thread_mdal->close(cwd_handle);
         threadarg_destroy(this_args);
         return (void*) this_ll;
@@ -145,7 +152,7 @@ void* thread_main(void* args) {
                 
                 char* child_ns_path = strdup(current_subnode.name);
                 if (config_traverse(this_args->base_config, child_ns_position, &child_ns_path, 0)) {
-                    this_retcode->flags |= TRAVERSE_FAILED;
+                    this_flags |= TRAVERSE_FAILED;
                     pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_ERR, "Failed to traverse to new child position: %s\n", current_subnode.name);
                     pthread_mutex_unlock(this_args->log_lock);
@@ -160,7 +167,7 @@ void* thread_main(void* args) {
                 RETCODE_FLAGS ns_spawn_flags = mustang_spawn(this_args, &next_ns_thread, child_ns_position, child_ns_path);
 
                 if (ns_spawn_flags != RETCODE_SUCCESS) {
-                    this_retcode->flags |= ns_spawn_flags;
+                    this_flags |= ns_spawn_flags;
                 } else {
                     // TODO: increment the number of threads successfully spawned to prepare a countdown monitor windup
                 }
@@ -195,7 +202,7 @@ void* thread_main(void* args) {
 
                 marfs_position* child_position = (marfs_position*) calloc(1, sizeof(marfs_position));
                 if (child_position == NULL) {
-                    this_retcode->flags |= ALLOC_FAILED;
+                    this_flags |= ALLOC_FAILED;
                     pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_ERR, "Failed to allocate space for new child position! (current entry: %s)\n", current_entry->d_name);
                     pthread_mutex_unlock(this_args->log_lock);
@@ -205,7 +212,7 @@ void* thread_main(void* args) {
                 }
 
                 if (config_duplicateposition(thread_position, child_position)) {
-                    this_retcode->flags |= DUPPOS_FAILED; 
+                    this_flags |= DUPPOS_FAILED; 
                     pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_ERR, "Failed to duplicate parent position to child (current entry: %s)\n", current_entry->d_name);
                     pthread_mutex_unlock(this_args->log_lock);
@@ -220,7 +227,7 @@ void* thread_main(void* args) {
                 int new_depth = config_traverse(this_args->base_config, child_position, &new_basepath, 0);
 
                 if (new_depth < 0) {
-                    this_retcode->flags |= TRAVERSE_FAILED;
+                    this_flags |= TRAVERSE_FAILED;
                     pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_ERR, "Failed to traverse to target: \"%s\"\n", current_entry->d_name);
                     pthread_mutex_unlock(this_args->log_lock);
@@ -235,7 +242,7 @@ void* thread_main(void* args) {
                 MDAL_DHANDLE next_cwd_handle = thread_mdal->opendir(child_position->ctxt, current_entry->d_name);
 
                 if (next_cwd_handle == NULL) {
-                    this_retcode->flags |= NEW_OPENDIR_FAILED;
+                    this_flags |= NEW_OPENDIR_FAILED;
                     pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_ERR, "Failed to open directory handle for child (%s) (directory: \"%s\")\n", strerror(errno), current_entry->d_name);
                     pthread_mutex_unlock(this_args->log_lock);
@@ -248,7 +255,7 @@ void* thread_main(void* args) {
                 }
 
                 if (thread_mdal->chdir(child_position->ctxt, next_cwd_handle)) {
-                    this_retcode->flags |= CHDIR_FAILED;
+                    this_flags |= CHDIR_FAILED;
                     pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_ERR, "Failed to chdir to target directory \"%s\" (%s).\n", current_entry->d_name, strerror(errno));
                     pthread_mutex_unlock(this_args->log_lock);
@@ -267,7 +274,7 @@ void* thread_main(void* args) {
                 RETCODE_FLAGS spawn_flags = mustang_spawn(this_args, &next_id, child_position, new_basepath);
 
                 if (spawn_flags != RETCODE_SUCCESS) {
-                    this_retcode->flags |= spawn_flags;
+                    this_flags |= spawn_flags;
                 } else {
                     // TODO: increment the number of active threads to prepare a countdown monitor windup call
 #if (DEBUG == 1)
@@ -288,7 +295,7 @@ void* thread_main(void* args) {
                 FTAG retrieved_tag = {0};
                 
                 if (ftag_initstr(&retrieved_tag, file_ftagstr)) {
-                    this_retcode->flags |= FTAG_INIT_FAILED;
+                    this_flags |= FTAG_INIT_FAILED;
                     free(file_ftagstr);
                     current_entry = thread_mdal->readdir(cwd_handle);
                     continue;
@@ -315,7 +322,6 @@ void* thread_main(void* args) {
                         pthread_rwlock_wrlock(this_args->hashtable_lock);
                         put(this_args->hashtable, retrieved_id); // put() dupes string into new heap space
                         pthread_rwlock_unlock(this_args->hashtable_lock);
-
                     }
 
                     free(retrieved_id);
@@ -348,12 +354,14 @@ void* thread_main(void* args) {
     }
 
     if (thread_mdal->closedir(cwd_handle)) {
-        this_retcode->flags |= CLOSEDIR_FAILED;
+        this_flags |= CLOSEDIR_FAILED;
     }
 
     if (threadarg_destroy(this_args)) {
-        this_retcode->flags |= ABANDONPOS_FAILED;
+        this_flags |= ABANDONPOS_FAILED;
     }
+
+    // TODO: add signal/decrement calls to regular monitor and countdown monitor
 
     // config_abandonposition() (wrapped by threadarg_destroy()) does not free
     // corresponding heap allocation, so that must be done manually
