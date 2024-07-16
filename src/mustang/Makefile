@@ -29,15 +29,12 @@ mustang_engine: mustang_engine.c thread_main.o libmustang.a
 # mustang engine relies on. mustang *must* still be invoked via the
 # mustang_engine executable and/or via its "mustang" frontend---use in other
 # applications by simply linking against the static library is insufficient
-libmustang.a: pthread_vector.o mustang_threading.o hashtable.o retcode_ll.o id_cache.o
+libmustang.a: mustang_monitors.o mustang_threading.o hashtable.o id_cache.o
 	ar rcs $@ $^
 
 # thread_main and retcode_ll (specifically retcode_ll_flush) need to link 
 # against the logging library. So, create special rules for those object files.
 thread_main.o: thread_main.c mustang_logging.h
-	$(CC) $(CFLAGS) $(MARFS_INCLUDE) -c $< -llogging
-
-retcode_ll.o: retcode_ll.c retcode_ll.h mustang_logging.h
 	$(CC) $(CFLAGS) $(MARFS_INCLUDE) -c $< -llogging
 
 %.o: %.c %.h

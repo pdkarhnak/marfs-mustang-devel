@@ -88,7 +88,7 @@ void interpret_flags(RETCODE_FLAGS flags);
 void* thread_main(void* args) {
     errno = 0; // Since errno not guaranteed to be zero-initialized
 
-    pthread_detach(pthread_self()); // TODO: add proper infrastructure to accommodate detached thread approach
+    pthread_detach(pthread_self()); 
 
     thread_args* this_args = (thread_args*) args;
 
@@ -285,15 +285,11 @@ void* thread_main(void* args) {
                     this_flags |= spawn_flags;
                 } else {
                     successful_subdir_spawns += 1;
-#if (DEBUG == 1)
                     LOG(LOG_DEBUG, "Forked new thread (ID: %0lx) at basepath %s\n", SHORT_ID(next_id), current_entry->d_name);
-#endif
                 }
 
             } else if (current_entry->d_type == DT_REG) {
-#if (DEBUG == 1)
                 LOG(LOG_DEBUG, "Recording file \"%s\" in hashtable.\n", current_entry->d_name);
-#endif
 
                 file_ftagstr = get_ftag(thread_position, thread_mdal, current_entry->d_name);
                 FTAG retrieved_tag = {0};
@@ -390,6 +386,7 @@ void* thread_main(void* args) {
  * readable debug messages.
  */
 void interpret_flags(RETCODE_FLAGS flags) {
+
     if (flags & ALLOC_FAILED) {
         LOG(LOG_ERR, "Thread %0lx was unable to allocate memory.\n", SHORT_ID(pthread_self()));
     }
@@ -403,7 +400,7 @@ void interpret_flags(RETCODE_FLAGS flags) {
     }
 
     if (flags & CHDIR_FAILED) {
-        LOG(LOG_ERR, "Thread %0lx was unable to chdir for at least one child thread.\n", SHORT_ID(pthread_self());
+        LOG(LOG_ERR, "Thread %0lx was unable to chdir for at least one child thread.\n", SHORT_ID(pthread_self()));
     }
 
     if (flags & PTHREAD_CREATE_FAILED) {

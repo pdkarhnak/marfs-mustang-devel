@@ -16,21 +16,25 @@
 #define DEBUG DEBUG_ALL
 #endif
 
+// In an emergency condition where the parent cannot successfully wait on the 
+// countdown monitor, this parameter sets a bounded wait condition that the 
+// parent will attempt in order to preserve thread-safety.
+#ifndef ATTEMPTS_MAX
+#define ATTEMPTS_MAX 128
+#endif
+
 #include "mustang_logging.h"
 #define LOG_PREFIX "mustang_engine"
 #include <logging/logging.h>
 
 #include "hashtable.h"
 #include "mustang_threading.h"
-#include "retcode_ll.h"
+#include "mustang_monitors.h"
 
 extern void* thread_main(void* args);
 size_t id_cache_capacity;
 
 int main(int argc, char** argv) {
-
-    // TODO: update arg indices.
-    // Max threads is argv[1] now, so shift everything else "back" in index by one
 
     errno = 0; // to guarantee an initially successful context and avoid "false positive" errno settings (errno not guaranteed to be initialized)
 
@@ -111,8 +115,31 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    capacity_monitor_t* threads_capacity_monitor = monitor_init();
+    capacity_monitor_t* threads_capacity_monitor = monitor_init(max_threads);
 
+    if (threads_capacity_monitor == NULL) {
+        LOG(LOG_ERR, "Failed to initialize capacity monitor! (%s)\n", strerror(errno));
+        fclose(output_ptr);
+        return 1;
+    }
+
+    countdown_monitor_t* threads_countdown_monitor = countdown_monitor_init();
+
+    if (threads_countdown_monitor == NULL) {
+        LOG(LOG_ERR, "Failed to initialize countdown monitor! (%s)\n", strerror(errno));
+        fclose(output_ptr);
+        return 1;
+    }
+
+    /*
+     * Reader-writer lock gives priority to writers (i.e., child threads) for
+     * interactions with the hashtable.
+     * When the parent eventually reads the hashtable to print its contents to 
+     * output, the parent will successfully acquire the lock if and only if
+     * the lock is available AND no writers are blocked on the lock.
+     *
+     * See usage below around hashtable_dump() call.
+     */
     pthread_rwlock_t ht_lock = PTHREAD_RWLOCK_INITIALIZER;
 
     char* config_path = getenv("MARFS_CONFIG_PATH");
@@ -140,9 +167,7 @@ int main(int argc, char** argv) {
     ssize_t successful_spawns = 0;
 
     for (int index = 6; index < argc; index += 1) {
-#if (DEBUG == 1)
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
-#endif
 
         struct stat arg_statbuf;
 
@@ -154,9 +179,7 @@ int main(int argc, char** argv) {
         }
 
         if ((arg_statbuf.st_mode & S_IFMT) != S_IFDIR) {
-#if (DEBUG <= 2)
             LOG(LOG_WARNING, "Path arg \"%s\" does not target a directory--skipping to next\n", argv[index]);
-#endif
             continue;
         }
 
@@ -199,23 +222,59 @@ int main(int argc, char** argv) {
 
         child_position->depth = child_depth;
 
-        thread_args* topdir_args = threadarg_init(parent_config, child_position, output_table, &ht_lock, next_basepath);
+        thread_args* topdir_args = threadarg_init(threads_capacity_monitor, threads_countdown_monitor, 
+                parent_config, child_position, output_table, &ht_lock, next_basepath);
 
         pthread_t next_id;
         
         if (pthread_create(&next_id, NULL, &thread_main, (void*) topdir_args) == 0) {
-            successful_spawns += 1; // TODO: unite error-handling code into separate branch of this if statement
+            successful_spawns += 1; 
+            LOG(LOG_INFO, "Created top-level thread with ID: %0lx and basepath \"%s\"\n", SHORT_ID(next_id), next_basepath);
+        } else {
+            LOG(LOG_ERR, "Failed to create top-level thread with target \"%s\"! (%s)\n", argv[index], strerror(errno));
         }
 
-        LOG(LOG_INFO, "Created top-level thread with ID: %0lx and basepath \"%s\"\n", SHORT_ID(next_id), next_basepath);
     }
 
-    countdown_monitor_windup(/* TODO: put monitor pointer here after allocating */, successful_spawns);
- 
+    countdown_monitor_windup(threads_countdown_monitor, successful_spawns);
+    countdown_monitor_wait(threads_countdown_monitor); // Will ensure that all child threads, including children of children, have returned before resuming execution
+
+    /*
+     * A "redundancy" measure to wait on threads if absolutely necessary.
+     * The reader-writer lock will be successfully acquired (and, therefore, 
+     * the hashtable contents printed to output) if and only if the lock is 
+     * available AND no writers are blocked on the lock.
+     */
     pthread_rwlock_rdlock(&ht_lock);
     hashtable_dump(output_table, output_ptr);
     pthread_rwlock_unlock(&ht_lock);
 
+    // An emergency bounded wait if all child threads (including children of children)
+    // somehow cannot be verified to have exited through the countdown_monitor functions.
+    if (countdown_monitor_destroy(threads_countdown_monitor) && (errno == EBUSY)) {
+        LOG(LOG_WARNING, "Wait on countdown monitor unsuccessful--attempting another bounded wait. (%s)\n", strerror(errno));
+
+        int finished_waiting = 0;
+        int attempts = 0;
+
+        while (!finished_waiting && (attempts < ATTEMPTS_MAX)) {
+            pthread_mutex_lock(threads_countdown_monitor->lock);
+
+            if (threads_countdown_monitor->active == 0) {
+                finished_waiting = 1;
+                pthread_mutex_unlock(threads_countdown_monitor->lock);
+            } else {
+                pthread_mutex_unlock(threads_countdown_monitor->lock);
+                attempts += 1;
+                sched_yield();
+            }
+        }
+
+        countdown_monitor_destroy(threads_countdown_monitor);
+    }
+
+    monitor_destroy(threads_capacity_monitor);
+ 
     if (fclose(output_ptr)) {
         LOG(LOG_WARNING, "Failed to close output file pointer! (%s)\n", strerror(errno));
     }
