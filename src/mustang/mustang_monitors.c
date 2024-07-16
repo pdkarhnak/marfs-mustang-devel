@@ -61,6 +61,16 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <errno.h>
 #include <sched.h>
 
+#ifdef DEBUG_MUSTANG
+#define DEBUG DEBUG_MUSTANG
+#elif (defined DEBUG_ALL)
+#define DEBUG DEBUG_ALL
+#endif
+
+#include "mustang_logging.h"
+#define LOG_PREFIX "mustang_monitors"
+#include <logging/logging.h>
+
 capacity_monitor_t* monitor_init(size_t new_capacity) {
     if (new_capacity == 0) {
         errno = EINVAL;
@@ -130,6 +140,8 @@ int monitor_procure(capacity_monitor_t* monitor) {
 
     monitor->active += 1;
 
+    LOG(LOG_DEBUG, "Monitor value is now: %zu\n", monitor->active);
+
     pthread_mutex_unlock(monitor->lock);
 
     return 0;
@@ -143,6 +155,7 @@ int monitor_vend(capacity_monitor_t* monitor) {
 
     pthread_mutex_lock(monitor->lock);
     monitor->active -= 1;
+    LOG(LOG_DEBUG, "Monitor value is now: %zu\n", monitor->active);
     pthread_cond_broadcast(monitor->cv);
     pthread_mutex_unlock(monitor->lock);
 
@@ -215,6 +228,7 @@ int countdown_monitor_windup(countdown_monitor_t* ctdwn_monitor, ssize_t amount)
 
     pthread_mutex_lock(ctdwn_monitor->lock);
     ctdwn_monitor->active += amount;
+    LOG(LOG_DEBUG, "Countdown monitor active count is now: %zd\n", ctdwn_monitor->active);
     pthread_mutex_unlock(ctdwn_monitor->lock);
 
     return 0;
@@ -228,6 +242,7 @@ int countdown_monitor_decrement(countdown_monitor_t* ctdwn_monitor) {
 
     pthread_mutex_lock(ctdwn_monitor->lock);
     ctdwn_monitor->active -= 1;
+    LOG(LOG_DEBUG, "Countdown monitor active count is now: %zd\n", ctdwn_monitor->active);
     pthread_mutex_unlock(ctdwn_monitor->lock);
 
     return 0;

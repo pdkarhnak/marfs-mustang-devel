@@ -46,7 +46,7 @@ if __name__ == '__main__':
 
     engine_args.append(init_output_handle)
 
-    if (args.use_stdout):
+    if (args.use_stderr):
         engine_args.append("stderr")
     else:
         engine_args.append(args.logfile)
