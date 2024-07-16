@@ -76,7 +76,6 @@ if __name__ == '__main__':
             engine_args.append(path_arg)
 
     print(f"Using invocation: {engine_args}")
-    exit(0)
 
     try:
         subprocess.run(engine_args)
