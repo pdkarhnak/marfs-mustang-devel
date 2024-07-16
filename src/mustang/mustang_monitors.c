@@ -3,13 +3,13 @@
 #include <errno.h>
 #include <sched.h>
 
-mustang_monitor_t* monitor_init(size_t new_capacity, pthread_mutex_t* new_lock, pthread_cond_t* new_cv) {
+capacity_monitor_t* monitor_init(size_t new_capacity, pthread_mutex_t* new_lock, pthread_cond_t* new_cv) {
     if ((new_capacity == 0) || (new_lock == NULL) || (new_cv == NULL)) {
         errno = EINVAL;
         return NULL;
     }
 
-    mustang_monitor_t* new_monitor = (mustang_monitor_t*) calloc(1, sizeof(mustang_monitor_t));
+    capacity_monitor_t* new_monitor = (capacity_monitor_t*) calloc(1, sizeof(capacity_monitor_t));
 
     if (new_monitor == NULL) {
         return NULL;
@@ -23,7 +23,7 @@ mustang_monitor_t* monitor_init(size_t new_capacity, pthread_mutex_t* new_lock, 
     return new_monitor;
 }
 
-int monitor_procure(mustang_monitor_t* monitor) {
+int monitor_procure(capacity_monitor_t* monitor) {
     if (monitor == NULL) {
         errno = EINVAL;
         return -1;
@@ -42,7 +42,7 @@ int monitor_procure(mustang_monitor_t* monitor) {
     return 0;
 }
 
-int monitor_vend(mustang_monitor_t* monitor) {
+int monitor_vend(capacity_monitor_t* monitor) {
     if (monitor == NULL) {
         errno = EINVAL;
         return -1;
@@ -56,7 +56,7 @@ int monitor_vend(mustang_monitor_t* monitor) {
     return 0;
 }
 
-int monitor_destroy(mustang_monitor_t* monitor) {
+int monitor_destroy(capacity_monitor_t* monitor) {
     if (monitor == NULL) {
         errno = EINVAL;
         return -1;

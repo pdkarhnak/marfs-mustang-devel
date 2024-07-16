@@ -4,22 +4,22 @@
 #include <pthread.h>
 #include <stdlib.h>
 
-typedef struct monitor_struct mustang_monitor_t;
+typedef struct monitor_struct capacity_monitor_t;
 
 typedef struct monitor_struct {
     size_t active;
     size_t capacity;
     pthread_mutex_t* lock;
     pthread_cond_t* cv;
-} mustang_monitor_t;
+} capacity_monitor_t;
 
-mustang_monitor_t* monitor_init(size_t new_capacity, pthread_mutex_t* new_lock, pthread_cond_t* new_cv);
+capacity_monitor_t* monitor_init(size_t new_capacity, pthread_mutex_t* new_lock, pthread_cond_t* new_cv);
 
-int monitor_procure(mustang_monitor_t* monitor);
+int monitor_procure(capacity_monitor_t* monitor);
 
-int monitor_vend(mustang_monitor_t* monitor);
+int monitor_vend(capacity_monitor_t* monitor);
 
-int monitor_destroy(mustang_monitor_t* monitor);
+int monitor_destroy(capacity_monitor_t* monitor);
 
 typedef struct countdown_monitor_struct countdown_monitor_t;
 

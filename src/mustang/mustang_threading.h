@@ -80,7 +80,7 @@ typedef struct thread_args_struct {
      * NOTE: for exclusive use of "child threads" (i.e., all threads other 
      * than the one that runs main() in mustang_engine.c)
      */
-    mustang_monitor_t* active_threads_mtr; 
+    capacity_monitor_t* active_threads_mtr; 
 
     /** 
      * A monitor to synchronize the number of total threads in current use.
