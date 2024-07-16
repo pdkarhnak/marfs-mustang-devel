@@ -13,7 +13,7 @@ typedef struct monitor_struct {
     pthread_cond_t* cv;
 } capacity_monitor_t;
 
-capacity_monitor_t* monitor_init(size_t new_capacity, pthread_mutex_t* new_lock, pthread_cond_t* new_cv);
+capacity_monitor_t* monitor_init(size_t new_capacity);
 
 int monitor_procure(capacity_monitor_t* monitor);
 
@@ -28,7 +28,7 @@ typedef struct countdown_monitor_struct {
     pthread_mutex_t* lock;
 } countdown_monitor_t;
 
-countdown_monitor_t* countdown_monitor_init(pthread_mutex_t* new_lock);
+countdown_monitor_t* countdown_monitor_init(void);
 
 int countdown_monitor_windup(countdown_monitor_t* ctdwn_monitor, ssize_t amount);
 

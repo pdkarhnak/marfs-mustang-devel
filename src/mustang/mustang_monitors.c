@@ -1,10 +1,10 @@
-#include "monitors.h"
+#include "mustang_monitors.h"
 #include <limits.h>
 #include <errno.h>
 #include <sched.h>
 
-capacity_monitor_t* monitor_init(size_t new_capacity, pthread_mutex_t* new_lock, pthread_cond_t* new_cv) {
-    if ((new_capacity == 0) || (new_lock == NULL) || (new_cv == NULL)) {
+capacity_monitor_t* monitor_init(size_t new_capacity) {
+    if (new_capacity == 0) {
         errno = EINVAL;
         return NULL;
     }
@@ -12,6 +12,41 @@ capacity_monitor_t* monitor_init(size_t new_capacity, pthread_mutex_t* new_lock,
     capacity_monitor_t* new_monitor = (capacity_monitor_t*) calloc(1, sizeof(capacity_monitor_t));
 
     if (new_monitor == NULL) {
+        return NULL;
+    }
+
+    pthread_mutex_t* new_lock = (pthread_mutex_t*) calloc(1, sizeof(pthread_mutex_t));
+
+    if (new_lock == NULL) {
+        free(new_monitor);
+        return NULL;
+    }
+
+    errno = 0;
+    errno = pthread_mutex_init(new_lock, NULL);
+
+    if (errno) {
+        free(new_monitor);
+        free(new_lock);
+        return NULL;
+    }
+
+    pthread_cond_t* new_cv = (pthread_cond_t*) calloc(1, sizeof(pthread_cond_t));
+
+    if (new_cv == NULL) {
+        free(new_monitor);
+        pthread_mutex_destroy(new_lock);
+        free(new_lock);
+        return NULL;
+    }
+
+    errno = pthread_cond_init(new_cv, NULL);
+
+    if (errno) {
+        free(new_monitor);
+        pthread_mutex_destroy(new_lock);
+        free(new_lock);
+        free(new_cv);
         return NULL;
     }
 
@@ -72,8 +107,14 @@ int monitor_destroy(capacity_monitor_t* monitor) {
 
     pthread_mutex_unlock(monitor->lock);
 
+    pthread_mutex_destroy(monitor->lock);
+    free(monitor->lock);
     monitor->lock = NULL;
+
+    pthread_cond_destroy(monitor->cv);
+    free(monitor->cv);
     monitor->cv = NULL;
+
     free(monitor);
 
     return 0;
@@ -81,9 +122,18 @@ int monitor_destroy(capacity_monitor_t* monitor) {
 
 /** BEGIN countdown monitor implementation **/
 
-countdown_monitor_t* countdown_monitor_init(pthread_mutex_t* new_lock) {
+countdown_monitor_t* countdown_monitor_init(void) {
+    pthread_mutex_t* new_lock = (pthread_mutex_t*) calloc(1, sizeof(pthread_mutex_t));
+
     if (new_lock == NULL) {
-        errno = EINVAL;
+        return NULL;
+    }
+
+    errno = 0;
+    errno = pthread_mutex_init(new_lock, NULL);
+
+    if (errno) {
+        free(new_lock);
         return NULL;
     }
 
@@ -163,6 +213,8 @@ int countdown_monitor_destroy(countdown_monitor_t* ctdwn_monitor) {
 
     pthread_mutex_unlock(ctdwn_monitor->lock);
 
+    pthread_mutex_destroy(ctdwn_monitor->lock);
+    free(ctdwn_monitor->lock);
     ctdwn_monitor->lock = NULL;
     free(ctdwn_monitor);
 

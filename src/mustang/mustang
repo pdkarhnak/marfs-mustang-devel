@@ -25,8 +25,8 @@ parser.add_argument("-t", "--threads-max", required=False, type=int, nargs=1, de
 logging_group = parser.add_mutually_exclusive_group()
 logging_group.add_argument("-l", "--logfile", "--log-file", required=False, type=str, nargs='?', default=default_logname, metavar="LOGFILE",
         help='Log file where thread-specific state changes, warnings, and errors will be recorded. Exclusive with --use-stdout.')
-logging_group.add_argument("--use-stdout", required=False, action='store_true', 
-        help='Do not log in a separate file and print all messages to stdout. Exclusive with -l/--logfile/--log-file.')
+logging_group.add_argument("--use-stderr", required=False, action='store_true', 
+        help='Do not log in a separate file and print all messages to stderr. Exclusive with -l/--logfile/--log-file.')
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -47,7 +47,7 @@ if __name__ == '__main__':
     engine_args.append(init_output_handle)
 
     if (args.use_stdout):
-        engine_args.append("stdout")
+        engine_args.append("stderr")
     else:
         engine_args.append(args.logfile)
 

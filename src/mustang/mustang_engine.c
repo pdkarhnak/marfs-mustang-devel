@@ -34,60 +34,23 @@ int main(int argc, char** argv) {
 
     errno = 0; // to guarantee an initially successful context and avoid "false positive" errno settings (errno not guaranteed to be initialized)
 
-    if (argc < 5) {
-        printf("USAGE: ./mustang-engine [hashtable capacity exponent] [cache capacity] [output file] [log file] [paths, ...]\n");
+    if (argc < 6) {
+        printf("USAGE: ./mustang-engine [max threads] [hashtable capacity exponent] [cache capacity] [output file] [log file] [paths, ...]\n");
         printf("\tHINT: see mustang wrapper or invoke \"mustang -h\" for more details.\n");
         return 1;
     } 
 
-    char* invalid = NULL;
-    size_t capacity_power = (size_t) strtol(argv[1], &invalid, 10);
-
-    if ((capacity_power <= 0) || (capacity_power >= 64) || 
-            (errno == EINVAL) || (*invalid != '\0')) {
-        LOG(LOG_ERR, "Bad hashtable capacity argument \"%s\" received. Please specify a positive integer between 1 and 64, then try again.\n", argv[1]);
-        return 1;
-    }
-
-    size_t computed_capacity = 1;
-    computed_capacity <<= capacity_power;
-
-    if (capacity_power < 5) {
-        LOG(LOG_WARNING, "Provided hashtable capacity argument \"%s\" will result in very small capacity %zu\n", argv[1], computed_capacity);
-    } else if (capacity_power >= 33) {
-        LOG(LOG_WARNING, "Provided hashtable capacity argument \"%s\" will result in very large capacity %zu\n", argv[1], computed_capacity);
-    }
-
-    invalid = NULL;
-    id_cache_capacity = (size_t) strtol(argv[2], &invalid, 10);
-
-    if ((id_cache_capacity <= 0) || (errno == EINVAL) || (*invalid != '\0')) {
-        LOG(LOG_ERR, "Bad cache capacity argument \"%s\" received. Please specify a nonnegative integer (i.e. > 0), then try again.\n", argv[2]);
-        return 1;
-    }
-
-    if (id_cache_capacity > 1024) {
-        LOG(LOG_WARNING, "Provided cache capacity argument will result in large per-thread data structures, which may overwhelm the heap.\n");
-    }
-
-    FILE* output_ptr = fopen(argv[3], "w");
+    FILE* output_ptr = fopen(argv[4], "w");
 
     if (output_ptr == NULL) {
-        LOG(LOG_ERR, "Failed to open file \"%s\" for writing to output (%s)\n", argv[1], strerror(errno));
+        LOG(LOG_ERR, "Failed to open file \"%s\" for writing to output (%s)\n", argv[4], strerror(errno));
         return 1;
     }
 
     // If stdout not being used for logging, redirect stdout and stderr to specified file
-    if (strncmp(argv[4], "stdout", strlen("stdout")) != 0) {
-        int log_fd = open(argv[3], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (strncmp(argv[5], "stderr", strlen("stderr")) != 0) {
+        int log_fd = open(argv[5], O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
-        if (dup2(log_fd, STDOUT_FILENO) == -1) {
-            LOG(LOG_ERR, "Failed to redirect stdout to log file fd! (%s)\n", strerror(errno));
-            fclose(output_ptr);
-            close(log_fd);
-            return 1;
-        }
-        
         if (dup2(log_fd, STDERR_FILENO) == -1) {
             LOG(LOG_ERR, "Failed to redirect stderr to log file fd! (%s)\n", strerror(errno));
             fclose(output_ptr);
@@ -98,16 +61,59 @@ int main(int argc, char** argv) {
         close(log_fd); // stdout and stderr have been redirected, so no need for the new fd
     }
 
+
+    char* invalid = NULL;
+    size_t capacity_power = (size_t) strtol(argv[2], &invalid, 10);
+
+    if ((capacity_power <= 0) || (capacity_power >= 64) || 
+            (errno == EINVAL) || (*invalid != '\0')) {
+        LOG(LOG_ERR, "Bad hashtable capacity argument \"%s\" received. Please specify a positive integer between 1 and 64, then try again.\n", argv[2]);
+        fclose(output_ptr);
+        return 1;
+    }
+
+    size_t computed_capacity = 1;
+    computed_capacity <<= capacity_power;
+
+    if (capacity_power < 5) {
+        LOG(LOG_WARNING, "Provided hashtable capacity argument \"%s\" will result in very small capacity %zu\n", argv[2], computed_capacity);
+    } else if (capacity_power >= 33) {
+        LOG(LOG_WARNING, "Provided hashtable capacity argument \"%s\" will result in very large capacity %zu\n", argv[2], computed_capacity);
+    }
+
+    invalid = NULL;
+    id_cache_capacity = (size_t) strtol(argv[3], &invalid, 10);
+
+    if ((id_cache_capacity <= 0) || (errno == EINVAL) || (*invalid != '\0')) {
+        LOG(LOG_ERR, "Bad cache capacity argument \"%s\" received. Please specify a nonnegative integer (i.e. > 0), then try again.\n", argv[3]);
+        fclose(output_ptr);
+        return 1;
+    }
+
+    if (id_cache_capacity > 1024) {
+        LOG(LOG_WARNING, "Provided cache capacity argument will result in large per-thread data structures, which may overwhelm the heap.\n");
+    }
+
+    invalid = NULL;
+    size_t max_threads = (size_t) strtol(argv[1], &invalid, 10);
+
+    if ((max_threads <= 0) || (errno == EINVAL) || (*invalid != '\0')) {
+        LOG(LOG_ERR, "Bad max threads argument \"%s\" received. Please specify a nonnegative integer (i.e. > 0), then try again.\n", argv[3]);
+        fclose(output_ptr);
+        return 1;
+    }
+
     hashtable* output_table = hashtable_init(computed_capacity);
     
     if ((output_table == NULL) || (errno == ENOMEM)) {
         LOG(LOG_ERR, "Failed to initialize hashtable (%s)\n", strerror(errno));
+        fclose(output_ptr);
         return 1;
     }
 
-    pthread_rwlock_t ht_lock = PTHREAD_RWLOCK_INITIALIZER;
+    capacity_monitor_t* threads_capacity_monitor = monitor_init();
 
-    // For debugging
+    pthread_rwlock_t ht_lock = PTHREAD_RWLOCK_INITIALIZER;
     pthread_mutex_t logging_lock = PTHREAD_MUTEX_INITIALIZER;
 
     char* config_path = getenv("MARFS_CONFIG_PATH");
@@ -119,7 +125,6 @@ int main(int argc, char** argv) {
 
     pthread_mutex_t erasure_lock = PTHREAD_MUTEX_INITIALIZER;
     marfs_config* parent_config = config_init(config_path, &erasure_lock);    
-
     marfs_position parent_position = { .ns = NULL, .depth = 0, .ctxt = NULL };
 
     if (config_establishposition(&parent_position, parent_config)) {
@@ -135,7 +140,7 @@ int main(int argc, char** argv) {
  
     ssize_t successful_spawns = 0;
 
-    for (int index = 5; index < argc; index += 1) {
+    for (int index = 6; index < argc; index += 1) {
 #if (DEBUG == 1)
         pthread_mutex_lock(&logging_lock);
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
