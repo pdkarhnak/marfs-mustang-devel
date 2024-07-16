@@ -120,7 +120,9 @@ typedef struct thread_args_struct {
  * is used as documented below for all other thread creation occurring in 
  * threads besides the top-level thread.
  */
-thread_args* threadarg_init(marfs_config* shared_config, marfs_position* shared_position, hashtable* new_hashtable, 
+thread_args* threadarg_init(capacity_monitor_t* new_active_threads_mtr, 
+        countdown_monitor_t* new_ctdwn_mtr, marfs_config* shared_config, 
+        marfs_position* shared_position, hashtable* new_hashtable, 
         pthread_rwlock_t* new_ht_lock, char* new_basepath, pthread_mutex_t* new_log_lock);
 
 /** 

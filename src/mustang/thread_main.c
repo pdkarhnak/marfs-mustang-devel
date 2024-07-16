@@ -92,17 +92,30 @@ void* thread_main(void* args) {
 
     thread_args* this_args = (thread_args*) args;
 
-    // TODO: check error code
-    monitor_procure(this_args->active_threads_mtr);
+    if (monitor_procure(this_args->active_threads_mtr)) {
+        pthread_mutex_lock(this_args->log_lock);
+        LOG(LOG_ERR, "Failed to wait on active threads monitor!\n");
+        pthread_mutex_unlock(this_args->log_lock);
+    }
+
     countdown_monitor_t* countdown_mtr = this_args->live_threads_mtr;
 
     id_cache* this_id_cache = id_cache_init(id_cache_capacity);
 
     RETCODE_FLAGS this_flags = RETCODE_SUCCESS;
 
-    if ((this_retcode) == NULL || (this_ll == NULL) || (this_id_cache == NULL)) {
+    if (this_id_cache == NULL) {
+        this_flags |= ALLOC_FAILED;
+
+        pthread_mutex_lock(this_args->log_lock);
+        interpret_flags(this_flags);
+        pthread_mutex_unlock(this_args->log_lock);
+        
+        monitor_vend(this_args->active_threads_mtr);
+        countdown_monitor_decrement(countdown_mtr);
         threadarg_destroy(this_args);
-        return NULL; // Will be interpreted as flag CHILD_ALLOC_FAILED
+
+        return NULL; 
     }
 
     marfs_position* thread_position = this_args->base_position;
@@ -110,8 +123,16 @@ void* thread_main(void* args) {
     // Attempt to fortify the thread's position (if not already fortified) and check for errors
     if ((thread_position->ctxt == NULL) && config_fortifyposition(thread_position)) {
         this_flags |= FORTIFYPOS_FAILED;
+
+        pthread_mutex_lock(this_args->log_lock);
+        interpret_flags(this_flags);
+        pthread_mutex_unlock(this_args->log_lock);
+        
+        monitor_vend(this_args->active_threads_mtr);
+        countdown_monitor_decrement(countdown_mtr);
         threadarg_destroy(this_args);
-        return (void*) this_ll;
+
+        return NULL;
     }
 
     // Define a convenient alias for this thread's relevant MDAL, from which 
@@ -129,13 +150,6 @@ void* thread_main(void* args) {
         pthread_mutex_unlock(this_args->log_lock);
         this_flags |= OPENDIR_FAILED;
         cwd_ok = 0;
-    }
-
-    if (spawned_threads == NULL) {
-        this_flags |= ALLOC_FAILED;
-        thread_mdal->close(cwd_handle);
-        threadarg_destroy(this_args);
-        return (void*) this_ll;
     }
 
     if (thread_position->depth == 0) {
@@ -226,6 +240,7 @@ void* thread_main(void* args) {
                     pthread_mutex_unlock(this_args->log_lock);
 
                     config_abandonposition(child_position);
+                    free(child_position);
                     current_entry = thread_mdal->readdir(cwd_handle);
                     continue;
                 }
@@ -242,6 +257,7 @@ void* thread_main(void* args) {
 
                     free(new_basepath);
                     config_abandonposition(child_position);
+                    free(child_position);
                     
                     current_entry = thread_mdal->readdir(cwd_handle);
                     continue;
@@ -257,6 +273,7 @@ void* thread_main(void* args) {
 
                     free(new_basepath);
                     config_abandonposition(child_position);
+                    free(child_position);
 
                     current_entry = thread_mdal->readdir(cwd_handle);
                     continue;
@@ -270,6 +287,7 @@ void* thread_main(void* args) {
 
                     free(new_basepath);
                     config_abandonposition(child_position);
+                    free(child_position);
                     thread_mdal->closedir(next_cwd_handle);
 
                     current_entry = thread_mdal->readdir(cwd_handle);
@@ -345,6 +363,13 @@ void* thread_main(void* args) {
             current_entry = thread_mdal->readdir(cwd_handle);
         }
 
+        // "Wind up" (i.e., add to) the countdown monitor according to the 
+        // number of threads actually spawned from this thread.
+        //
+        // With the usage pattern of windup-then-decrement, the "parent" 
+        // (i.e., thread which runs main() in mustang_engine.c) should be 
+        // appropriately forced to wait for all child threads to exit before 
+        // cleaning up shared state.
         countdown_monitor_windup(countdown_mtr, successful_subdir_spawns);
 
         /* --- begin join and cleanup --- */
@@ -367,19 +392,22 @@ void* thread_main(void* args) {
         this_flags |= CLOSEDIR_FAILED;
     }
 
-    countdown_monitor_decrement(countdown_mtr);
-
-    // TODO: add signal/decrement calls to regular monitor and countdown monitor
-    // TODO: check error code
-    monitor_vend(this_args->active_threads_mtr);
-
-    if (threadarg_destroy(this_args)) {
-        this_flags |= ABANDONPOS_FAILED;
+    if (monitor_vend(this_args->active_threads_mtr)) {
+        pthread_mutex_lock(this_args->log_lock);
+        LOG(LOG_ERR, "Failed to broadcast on active threads monitor!\n");
+        pthread_mutex_unlock(this_args->log_lock);
     }
 
-    // config_abandonposition() (wrapped by threadarg_destroy()) does not free
-    // corresponding heap allocation, so that must be done manually
-    free(thread_position);
+    pthread_mutex_lock(this_args->log_lock);
+    interpret_flags(this_flags);
+    pthread_mutex_unlock(this_args->log_lock);
+
+    if (countdown_monitor_decrement(countdown_mtr)) {
+        pthread_mutex_lock(this_args->log_lock);
+        LOG(LOG_ERR, "Failed to decrement countdown monitor!\n");
+        pthread_mutex_unlock(this_args->log_lock);
+    }
+
     thread_position = NULL;
     id_cache_destroy(this_id_cache);
 
@@ -393,54 +421,47 @@ void* thread_main(void* args) {
  */
 void interpret_flags(RETCODE_FLAGS flags) {
     if (flags & ALLOC_FAILED) {
-        LOG(LOG_ERR, "Thread %0lx was unable to allocate memory.\n", SHORT_ID(current_node->self));
+        LOG(LOG_ERR, "Thread %0lx was unable to allocate memory.\n", SHORT_ID(pthread_self()));
     }
 
     if (flags & OPENDIR_FAILED) {
-        LOG(LOG_ERR, "Thread %0lx was unable to open a valid handle for its assigned directory.\n", SHORT_ID(current_node->self));
+        LOG(LOG_ERR, "Thread %0lx was unable to open a valid handle for its assigned directory.\n", SHORT_ID(pthread_self()));
     }
 
     if (flags & NEW_OPENDIR_FAILED) {
-        LOG(LOG_ERR, "Thread %0lx was unable to open a valid handle for at least one subdirectory.\n", SHORT_ID(current_node->self));
+        LOG(LOG_ERR, "Thread %0lx was unable to open a valid handle for at least one subdirectory.\n", SHORT_ID(pthread_self()));
     }
 
     if (flags & CHDIR_FAILED) {
+        LOG(LOG_ERR, "Thread %0lx was unable to chdir for at least one child thread.\n", SHORT_ID(pthread_self());
     }
 
     if (flags & PTHREAD_CREATE_FAILED) {
-        LOG(LOG_ERR, "Thread %0lx had at least one pthread_create() call fail.\n", SHORT_ID(current_node->self));
+        LOG(LOG_ERR, "Thread %0lx had at least one pthread_create() call fail.\n", SHORT_ID(pthread_self()));
     }
 
     if (flags & PTHREAD_JOIN_FAILED) {
-        LOG(LOG_ERR, "Thread %0lx failed to join at least one thread.\n", SHORT_ID(current_node->self));
-    }
-
-    if (flags & CHILD_ALLOC_FAILED) {
-        LOG(LOG_ERR, "At least one child of thread %0lx was unable to set up and exited.\n", SHORT_ID(current_node->self));
+        LOG(LOG_ERR, "Thread %0lx failed to join at least one thread.\n", SHORT_ID(pthread_self()));
     }
 
     if (flags & DUPPOS_FAILED) {
-        LOG(LOG_ERR, "Thread %0lx was unable to duplicate its position in at least one case.\n", SHORT_ID(current_node->self));
+        LOG(LOG_ERR, "Thread %0lx was unable to duplicate its position in at least one case.\n", SHORT_ID(pthread_self()));
     }
 
     if (flags & TRAVERSE_FAILED) {
-        LOG(LOG_ERR, "Thread %0lx made at lesat one unsuccessful config_traverse() call.\n", SHORT_ID(current_node->self));
+        LOG(LOG_ERR, "Thread %0lx made at lesat one unsuccessful config_traverse() call.\n", SHORT_ID(pthread_self()));
     }
 
     if (flags & CLOSEDIR_FAILED) {
-        LOG(LOG_WARNING, "Thread %0lx was unable to close its previously opened directory handle.\n", SHORT_ID(current_node->self));
+        LOG(LOG_WARNING, "Thread %0lx was unable to close its previously opened directory handle.\n", SHORT_ID(pthread_self()));
     }
 
     if (flags & FORTIFYPOS_FAILED) {
-        LOG(LOG_ERR, "Thread %0lx was unable to fortify its position.\n", SHORT_ID(current_node->self));
+        LOG(LOG_ERR, "Thread %0lx was unable to fortify its position.\n", SHORT_ID(pthread_self()));
     }
 
     if (flags & FTAG_INIT_FAILED) {
-        LOG(LOG_ERR, "Thread %0lx was unable to initialize an FTAG in at least one case.\n", SHORT_ID(current_node->self));
-    }
-
-    if (flags & ABANDONPOS_FAILED) {
-        LOG(LOG_ERR, "Thread %0lx was unable to abandon its position.\n", SHORT_ID(current_node->self));
+        LOG(LOG_ERR, "Thread %0lx was unable to initialize an FTAG in at least one case.\n", SHORT_ID(pthread_self()));
     }
 }
 

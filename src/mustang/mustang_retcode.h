@@ -78,13 +78,11 @@ typedef enum {
     CHDIR_FAILED =              0x8,
     PTHREAD_CREATE_FAILED =     0x10,
     PTHREAD_JOIN_FAILED =       0x20,
-    CHILD_ALLOC_FAILED =        0x40, /* Child couldn't set up and returned NULL */
-    DUPPOS_FAILED =             0x80,
-    TRAVERSE_FAILED =           0x100,
-    CLOSEDIR_FAILED =           0x200,
-    FORTIFYPOS_FAILED =         0x800,
-    FTAG_INIT_FAILED =          0x1000,
-    ABANDONPOS_FAILED =         0x2000
+    DUPPOS_FAILED =             0x40,
+    TRAVERSE_FAILED =           0x80,
+    CLOSEDIR_FAILED =           0x100,
+    FORTIFYPOS_FAILED =         0x200,
+    FTAG_INIT_FAILED =          0x400,
 } RETCODE_FLAGS;
 
 #endif

@@ -69,14 +69,19 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #define ENOATTR ENODATA
 #endif
 
-thread_args* threadarg_init(marfs_config* shared_config, marfs_position* shared_position, hashtable* new_hashtable, 
-        pthread_mutex_t* new_ht_lock, char* new_basepath, pthread_mutex_t* new_log_lock) {
+thread_args* threadarg_init(capacity_monitor_t* new_active_threads_mtr, 
+        countdown_monitor_t* new_ctdwn_mtr, marfs_config* shared_config, 
+        marfs_position* shared_position, hashtable* new_hashtable, 
+        pthread_rwlock_t* new_ht_lock, char* new_basepath, pthread_mutex_t* new_log_lock) {
+
     thread_args* new_args = (thread_args*) calloc(1, sizeof(thread_args));
 
     if ((new_args == NULL) || (errno == ENOMEM)) {
         return NULL;
     }
 
+    new_args->active_threads_mtr = new_active_threads_mtr;
+    new_args->live_threads_mtr = new_ctdwn_mtr;
     new_args->base_config = shared_config;
     new_args->base_position = shared_position;
     new_args->hashtable = new_hashtable;
@@ -97,6 +102,8 @@ RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_p
         return flags;
     }
 
+    new_args->active_threads_mtr = existing->active_threads_mtr;
+    new_args->live_threads_mtr = existing->live_threads_mtr;
     new_args->base_config = existing->base_config;
     new_args->base_position = new_position;
     new_args->hashtable = existing->hashtable;
@@ -118,6 +125,9 @@ RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_p
 
 int threadarg_destroy(thread_args* args) {
     int abandon_code = config_abandonposition(args->base_position);
+    free(args->base_position);
+    args->active_threads_mtr = NULL;
+    args->live_threads_mtr = NULL;
     args->base_config = NULL;
     free(args);
     return abandon_code;
