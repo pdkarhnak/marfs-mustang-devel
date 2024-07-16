@@ -93,9 +93,9 @@ void* thread_main(void* args) {
     thread_args* this_args = (thread_args*) args;
 
     if (monitor_procure(this_args->active_threads_mtr)) {
-        pthread_mutex_lock(this_args->log_lock);
-        LOG(LOG_ERR, "Failed to wait on active threads monitor!\n");
-        pthread_mutex_unlock(this_args->log_lock);
+        // NOTE for logging calls: this macro wraps a vprintf() call to stderr,
+        // which will lock around the actual writing---no extra locking needed
+        LOG(LOG_ERR, "Failed to wait on active threads monitor!\n"); 
     }
 
     countdown_monitor_t* countdown_mtr = this_args->live_threads_mtr;
@@ -107,9 +107,7 @@ void* thread_main(void* args) {
     if (this_id_cache == NULL) {
         this_flags |= ALLOC_FAILED;
 
-        pthread_mutex_lock(this_args->log_lock);
         interpret_flags(this_flags);
-        pthread_mutex_unlock(this_args->log_lock);
         
         monitor_vend(this_args->active_threads_mtr);
         countdown_monitor_decrement(countdown_mtr);
@@ -124,9 +122,7 @@ void* thread_main(void* args) {
     if ((thread_position->ctxt == NULL) && config_fortifyposition(thread_position)) {
         this_flags |= FORTIFYPOS_FAILED;
 
-        pthread_mutex_lock(this_args->log_lock);
         interpret_flags(this_flags);
-        pthread_mutex_unlock(this_args->log_lock);
         
         monitor_vend(this_args->active_threads_mtr);
         countdown_monitor_decrement(countdown_mtr);
@@ -145,9 +141,7 @@ void* thread_main(void* args) {
     char cwd_ok = 1;
 
     if (cwd_handle == NULL) {
-        pthread_mutex_lock(this_args->log_lock);
         LOG(LOG_ERR, "Failed to open current directory for reading (%s)\n", strerror(errno));
-        pthread_mutex_unlock(this_args->log_lock);
         this_flags |= OPENDIR_FAILED;
         cwd_ok = 0;
     }
@@ -172,9 +166,7 @@ void* thread_main(void* args) {
                 char* child_ns_path = strdup(current_subnode.name);
                 if (config_traverse(this_args->base_config, child_ns_position, &child_ns_path, 0)) {
                     this_flags |= TRAVERSE_FAILED;
-                    pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_ERR, "Failed to traverse to new child position: %s\n", current_subnode.name);
-                    pthread_mutex_unlock(this_args->log_lock);
 
                     free(child_ns_path);
                     config_abandonposition(child_ns_position);
@@ -225,9 +217,7 @@ void* thread_main(void* args) {
                 marfs_position* child_position = (marfs_position*) calloc(1, sizeof(marfs_position));
                 if (child_position == NULL) {
                     this_flags |= ALLOC_FAILED;
-                    pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_ERR, "Failed to allocate space for new child position! (current entry: %s)\n", current_entry->d_name);
-                    pthread_mutex_unlock(this_args->log_lock);
 
                     current_entry = thread_mdal->readdir(cwd_handle);
                     continue;
@@ -235,9 +225,7 @@ void* thread_main(void* args) {
 
                 if (config_duplicateposition(thread_position, child_position)) {
                     this_flags |= DUPPOS_FAILED; 
-                    pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_ERR, "Failed to duplicate parent position to child (current entry: %s)\n", current_entry->d_name);
-                    pthread_mutex_unlock(this_args->log_lock);
 
                     config_abandonposition(child_position);
                     free(child_position);
@@ -251,9 +239,7 @@ void* thread_main(void* args) {
 
                 if (new_depth < 0) {
                     this_flags |= TRAVERSE_FAILED;
-                    pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_ERR, "Failed to traverse to target: \"%s\"\n", current_entry->d_name);
-                    pthread_mutex_unlock(this_args->log_lock);
 
                     free(new_basepath);
                     config_abandonposition(child_position);
@@ -267,9 +253,7 @@ void* thread_main(void* args) {
 
                 if (next_cwd_handle == NULL) {
                     this_flags |= NEW_OPENDIR_FAILED;
-                    pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_ERR, "Failed to open directory handle for child (%s) (directory: \"%s\")\n", strerror(errno), current_entry->d_name);
-                    pthread_mutex_unlock(this_args->log_lock);
 
                     free(new_basepath);
                     config_abandonposition(child_position);
@@ -281,9 +265,7 @@ void* thread_main(void* args) {
 
                 if (thread_mdal->chdir(child_position->ctxt, next_cwd_handle)) {
                     this_flags |= CHDIR_FAILED;
-                    pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_ERR, "Failed to chdir to target directory \"%s\" (%s).\n", current_entry->d_name, strerror(errno));
-                    pthread_mutex_unlock(this_args->log_lock);
 
                     free(new_basepath);
                     config_abandonposition(child_position);
@@ -304,17 +286,13 @@ void* thread_main(void* args) {
                 } else {
                     successful_subdir_spawns += 1;
 #if (DEBUG == 1)
-                    pthread_mutex_lock(this_args->log_lock);
                     LOG(LOG_DEBUG, "Forked new thread (ID: %0lx) at basepath %s\n", SHORT_ID(next_id), current_entry->d_name);
-                    pthread_mutex_unlock(this_args->log_lock);
 #endif
                 }
 
             } else if (current_entry->d_type == DT_REG) {
 #if (DEBUG == 1)
-                pthread_mutex_lock(this_args->log_lock);
                 LOG(LOG_DEBUG, "Recording file \"%s\" in hashtable.\n", current_entry->d_name);
-                pthread_mutex_unlock(this_args->log_lock);
 #endif
 
                 file_ftagstr = get_ftag(thread_position, thread_mdal, current_entry->d_name);
@@ -335,9 +313,7 @@ void* thread_main(void* args) {
                 for (size_t i = objno_min; i <= objno_max; i += 1) {
                     retrieved_tag.objno = i;
                     if (datastream_objtarget(&retrieved_tag, &(thread_position->ns->prepo->datascheme), &retrieved_id, &placeholder_erasure, &placeholder_location)) { 
-                        pthread_mutex_lock(this_args->log_lock);
                         LOG(LOG_ERR, "Failed to get object ID for chunk %zu of current object \"%s\"\n", i, current_entry->d_name);
-                        pthread_mutex_unlock(this_args->log_lock);
                         continue;
                     }
 
@@ -393,19 +369,13 @@ void* thread_main(void* args) {
     }
 
     if (monitor_vend(this_args->active_threads_mtr)) {
-        pthread_mutex_lock(this_args->log_lock);
         LOG(LOG_ERR, "Failed to broadcast on active threads monitor!\n");
-        pthread_mutex_unlock(this_args->log_lock);
     }
 
-    pthread_mutex_lock(this_args->log_lock);
     interpret_flags(this_flags);
-    pthread_mutex_unlock(this_args->log_lock);
 
     if (countdown_monitor_decrement(countdown_mtr)) {
-        pthread_mutex_lock(this_args->log_lock);
         LOG(LOG_ERR, "Failed to decrement countdown monitor!\n");
-        pthread_mutex_unlock(this_args->log_lock);
     }
 
     thread_position = NULL;

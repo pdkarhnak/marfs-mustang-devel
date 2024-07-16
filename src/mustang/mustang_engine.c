@@ -114,7 +114,6 @@ int main(int argc, char** argv) {
     capacity_monitor_t* threads_capacity_monitor = monitor_init();
 
     pthread_rwlock_t ht_lock = PTHREAD_RWLOCK_INITIALIZER;
-    pthread_mutex_t logging_lock = PTHREAD_MUTEX_INITIALIZER;
 
     char* config_path = getenv("MARFS_CONFIG_PATH");
 
@@ -142,9 +141,7 @@ int main(int argc, char** argv) {
 
     for (int index = 6; index < argc; index += 1) {
 #if (DEBUG == 1)
-        pthread_mutex_lock(&logging_lock);
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
-        pthread_mutex_unlock(&logging_lock);
 #endif
 
         struct stat arg_statbuf;
@@ -152,17 +149,13 @@ int main(int argc, char** argv) {
         int statcode = stat(argv[index], &arg_statbuf);
 
         if (statcode) {
-            pthread_mutex_lock(&logging_lock);
             LOG(LOG_ERR, "Failed to stat path arg \"%s\" (%s)--skipping to next\n", argv[index], strerror(errno));
-            pthread_mutex_unlock(&logging_lock);
             continue;
         }
 
         if ((arg_statbuf.st_mode & S_IFMT) != S_IFDIR) {
 #if (DEBUG <= 2)
-            pthread_mutex_lock(&logging_lock);
             LOG(LOG_WARNING, "Path arg \"%s\" does not target a directory--skipping to next\n", argv[index]);
-            pthread_mutex_unlock(&logging_lock);
 #endif
             continue;
         }
@@ -170,9 +163,7 @@ int main(int argc, char** argv) {
         marfs_position* child_position = calloc(1, sizeof(marfs_position));
 
         if (config_duplicateposition(&parent_position, child_position)) {
-            pthread_mutex_lock(&logging_lock);
             LOG(LOG_ERR, "Failed to duplicate parent position to child!\n");
-            pthread_mutex_unlock(&logging_lock);
         }
 
         char* next_basepath = strdup(argv[index]);
@@ -198,21 +189,17 @@ int main(int argc, char** argv) {
             child_dirhandle = current_child_mdal->opendir(child_position->ctxt, next_basepath);
 
             if (child_dirhandle == NULL) {
-                pthread_mutex_lock(&logging_lock);
                 LOG(LOG_ERR, "Failed to open target directory \"%s\" (%s)\n", next_basepath, strerror(errno));
-                pthread_mutex_unlock(&logging_lock);
             }
 
             if (current_child_mdal->chdir(child_position->ctxt, child_dirhandle)) {
-                pthread_mutex_lock(&logging_lock);
                 LOG(LOG_ERR, "Failed to chdir into target directory \"%s\" (%s)\n", next_basepath, strerror(errno));
-                pthread_mutex_unlock(&logging_lock);
             }
         }
 
         child_position->depth = child_depth;
 
-        thread_args* topdir_args = threadarg_init(parent_config, child_position, output_table, &ht_lock, next_basepath, &logging_lock);
+        thread_args* topdir_args = threadarg_init(parent_config, child_position, output_table, &ht_lock, next_basepath);
 
         pthread_t next_id;
         
@@ -220,15 +207,11 @@ int main(int argc, char** argv) {
             successful_spawns += 1; // TODO: unite error-handling code into separate branch of this if statement
         }
 
-        pthread_mutex_lock(&logging_lock);
         LOG(LOG_INFO, "Created top-level thread with ID: %0lx and basepath \"%s\"\n", SHORT_ID(next_id), next_basepath);
-        pthread_mutex_unlock(&logging_lock);
     }
 
     countdown_monitor_windup(/* TODO: put monitor pointer here after allocating */, successful_spawns);
  
-    pthread_mutex_destroy(&logging_lock);
-
     pthread_rwlock_rdlock(&ht_lock);
     hashtable_dump(output_table, output_ptr);
     pthread_rwlock_unlock(&ht_lock);

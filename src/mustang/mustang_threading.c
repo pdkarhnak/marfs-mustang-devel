@@ -72,7 +72,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 thread_args* threadarg_init(capacity_monitor_t* new_active_threads_mtr, 
         countdown_monitor_t* new_ctdwn_mtr, marfs_config* shared_config, 
         marfs_position* shared_position, hashtable* new_hashtable, 
-        pthread_rwlock_t* new_ht_lock, char* new_basepath, pthread_mutex_t* new_log_lock) {
+        pthread_rwlock_t* new_ht_lock, char* new_basepath) {
 
     thread_args* new_args = (thread_args*) calloc(1, sizeof(thread_args));
 
@@ -87,7 +87,6 @@ thread_args* threadarg_init(capacity_monitor_t* new_active_threads_mtr,
     new_args->hashtable = new_hashtable;
     new_args->hashtable_lock = new_ht_lock;
     new_args->basepath = new_basepath;
-    new_args->log_lock = new_log_lock;
 
     return new_args;
 }
@@ -110,7 +109,6 @@ RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_p
     new_args->hashtable_lock = existing->hashtable_lock;
 
     new_args->basepath = new_basepath;
-    new_args->log_lock = existing->log_lock;
 
     int createcode = pthread_create(thread_id, NULL, &thread_main, (void*) new_args);
 
