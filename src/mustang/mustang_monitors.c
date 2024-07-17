@@ -276,3 +276,84 @@ int countdown_monitor_destroy(countdown_monitor_t* ctdwn_monitor) {
 
     return 0;
 }
+
+parent_child_monitor_t* pc_monitor_init(void) {
+    parent_child_monitor_t* new_pc_monitor = (parent_child_monitor_t*) calloc(1, sizeof(parent_child_monitor_t));
+
+    if (new_pc_monitor == NULL) {
+        return NULL;
+    }
+
+    new_pc_monitor->parent_alive = 1;
+
+    pthread_mutex_t* pc_monitor_lock = (pthread_mutex_t*) calloc(1, sizeof(pthread_mutex_t));
+
+    if (pc_monitor_lock == NULL) {
+        free(new_pc_monitor);
+        return NULL;
+    }
+
+    if (pthread_mutex_init(pc_monitor_lock, NULL)) {
+        free(pc_monitor_lock);
+        free(new_pc_monitor);
+        return NULL;
+    }
+
+    new_pc_monitor->lock = pc_monitor_lock;
+
+    return new_pc_monitor;
+}
+
+int pc_monitor_peek(parent_child_monitor_t* pc_monitor) {
+    if (pc_monitor == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    int parent_status;
+    pthread_mutex_lock(pc_monitor->lock);
+    parent_status = pc_monitor->parent_alive;
+    pthread_mutex_unlock(pc_monitor->lock);
+
+    return parent_status;
+}
+
+int pc_monitor_signal(parent_child_monitor_t* pc_monitor) {
+    if (pc_monitor == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    pthread_mutex_lock(pc_monitor->lock);
+    pc_monitor->parent_alive = 0;
+    pthread_mutex_unlock(pc_monitor->lock);
+
+    return 0;
+}
+
+int pc_monitor_destroy(parent_child_monitor_t* pc_monitor) {
+    if (pc_monitor == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    int parent_status;
+    pthread_mutex_lock(pc_monitor->lock);
+
+    parent_status = pc_monitor->parent_alive;
+
+    if (parent_status) {
+        pthread_mutex_unlock(pc_monitor->lock);
+        errno = EINVAL;
+        return -1;
+    }
+
+    pthread_mutex_unlock(pc_monitor->lock);
+
+    pthread_mutex_destroy(pc_monitor->lock);
+    free(pc_monitor->lock);
+    pc_monitor->lock = NULL;
+    free(pc_monitor);
+
+    return 0;
+}

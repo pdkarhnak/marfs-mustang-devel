@@ -100,4 +100,19 @@ int countdown_monitor_decrement(countdown_monitor_t* ctdwn_monitor, size_t* acti
 
 int countdown_monitor_destroy(countdown_monitor_t* ctdwn_monitor);
 
+typedef struct parent_child_monitor_struct parent_child_monitor_t;
+
+typedef struct parent_child_monitor_struct {
+    int parent_alive;
+    pthread_mutex_t* lock;
+} parent_child_monitor_t;
+
+parent_child_monitor_t* pc_monitor_init(void);
+
+int pc_monitor_peek(parent_child_monitor_t* pc_monitor);
+
+int pc_monitor_signal(parent_child_monitor_t* pc_monitor);
+
+int pc_monitor_destroy(parent_child_monitor_t* pc_monitor);
+
 #endif

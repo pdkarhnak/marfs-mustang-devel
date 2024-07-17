@@ -95,6 +95,13 @@ typedef struct thread_args_struct {
      */
     countdown_monitor_t* live_threads_mtr;
 
+    /** 
+     * A monitor to ensure that the parent has "taken its turn" in adding to
+     * the live threads monitor before a thread can take cleanup actions when 
+     * it sees that the live threads monitor apparently reads zero.
+     */
+    parent_child_monitor_t* pc_monitor;
+
     // MarFS context components for this thread: position and config
     marfs_config* base_config;
     pthread_mutex_t* config_erasure_lock;
@@ -121,10 +128,11 @@ typedef struct thread_args_struct {
  * threads besides the top-level thread.
  */
 thread_args* threadarg_init(capacity_monitor_t* new_active_threads_mtr, 
-        countdown_monitor_t* new_ctdwn_mtr, marfs_config* shared_config, 
-        pthread_mutex_t* shared_erasure_lock, marfs_position* shared_position, 
-        hashtable* new_hashtable, pthread_mutex_t* new_ht_lock, 
-        FILE* new_output_ptr, char* new_basepath);
+        countdown_monitor_t* new_ctdwn_mtr, parent_child_monitor_t* new_pc_monitor,
+        marfs_config* shared_config, pthread_mutex_t* shared_erasure_lock, 
+        marfs_position* shared_position, hashtable* new_hashtable, 
+        pthread_mutex_t* new_ht_lock, FILE* new_output_ptr, 
+        char* new_basepath);
 
 /** 
  * Given a thread's arguments and new inputs for thread marfs_position and

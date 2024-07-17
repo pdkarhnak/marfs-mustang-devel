@@ -379,7 +379,7 @@ void* thread_main(void* args) {
         LOG(LOG_ERR, "Failed to decrement countdown monitor!\n");
     }
 
-    if (threads_alive == 0) {
+    if ((threads_alive == 0) && (pc_monitor_peek(this_args->pc_monitor) == 0)) {
         // Hashtable and associated shared state cleanup
         pthread_mutex_lock(this_args->hashtable_lock);
         hashtable_dump(this_args->hashtable, this_args->hashtable_output_ptr);
@@ -391,6 +391,7 @@ void* thread_main(void* args) {
         // Begin monitors cleanup
         monitor_destroy(this_args->active_threads_mtr);
         countdown_monitor_destroy(countdown_mtr);
+        pc_monitor_destroy(this_args->pc_monitor);
 
         // Begin config cleanup
         config_term(this_args->base_config);

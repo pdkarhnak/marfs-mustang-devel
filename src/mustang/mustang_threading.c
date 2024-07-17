@@ -70,10 +70,11 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #endif
 
 thread_args* threadarg_init(capacity_monitor_t* new_active_threads_mtr, 
-        countdown_monitor_t* new_ctdwn_mtr, marfs_config* shared_config, 
-        pthread_mutex_t* shared_erasure_lock, marfs_position* shared_position, 
-        hashtable* new_hashtable, pthread_mutex_t* new_ht_lock, 
-        FILE* new_output_ptr, char* new_basepath) {
+        countdown_monitor_t* new_ctdwn_mtr, parent_child_monitor_t* new_pc_monitor, 
+        marfs_config* shared_config, pthread_mutex_t* shared_erasure_lock, 
+        marfs_position* shared_position, hashtable* new_hashtable, 
+        pthread_mutex_t* new_ht_lock, FILE* new_output_ptr, 
+        char* new_basepath) {
 
     thread_args* new_args = (thread_args*) calloc(1, sizeof(thread_args));
 
@@ -83,6 +84,7 @@ thread_args* threadarg_init(capacity_monitor_t* new_active_threads_mtr,
 
     new_args->active_threads_mtr = new_active_threads_mtr;
     new_args->live_threads_mtr = new_ctdwn_mtr;
+    new_args->pc_monitor = new_pc_monitor;
     new_args->base_config = shared_config;
     new_args->config_erasure_lock = shared_erasure_lock;
     new_args->base_position = shared_position;
@@ -106,6 +108,7 @@ RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_p
 
     new_args->active_threads_mtr = existing->active_threads_mtr;
     new_args->live_threads_mtr = existing->live_threads_mtr;
+    new_args->pc_monitor = existing->pc_monitor;
     new_args->base_config = existing->base_config;
     new_args->config_erasure_lock = existing->config_erasure_lock;
     new_args->base_position = new_position;

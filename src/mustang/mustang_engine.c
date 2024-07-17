@@ -138,6 +138,14 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    parent_child_monitor_t* parent_child_monitor = pc_monitor_init();
+
+    if (parent_child_monitor == NULL) {
+        LOG(LOG_ERR, "Failed to initialize parent-child monitor! (%s)\n", strerror(errno));
+        fclose(output_ptr);
+        return 1;
+    }
+
     /*
      * Reader-writer lock gives priority to writers (i.e., child threads) for
      * interactions with the hashtable.
@@ -232,7 +240,7 @@ int main(int argc, char** argv) {
 
         child_position->depth = child_depth;
 
-        thread_args* topdir_args = threadarg_init(threads_capacity_monitor, threads_countdown_monitor, 
+        thread_args* topdir_args = threadarg_init(threads_capacity_monitor, threads_countdown_monitor, parent_child_monitor,
                 parent_config, erasure_lock, child_position, output_table, ht_lock, output_ptr, next_basepath);
 
         pthread_t next_id;
