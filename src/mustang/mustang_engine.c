@@ -147,7 +147,8 @@ int main(int argc, char** argv) {
      *
      * See usage below around hashtable_dump() call.
      */
-    pthread_rwlock_t ht_lock = PTHREAD_RWLOCK_INITIALIZER;
+    pthread_mutex_t* ht_lock = (pthread_mutex_t*) calloc(1, sizeof(pthread_mutex_t));
+    pthread_mutex_init(ht_lock, NULL);
 
     char* config_path = getenv("MARFS_CONFIG_PATH");
 
@@ -156,8 +157,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    pthread_mutex_t erasure_lock = PTHREAD_MUTEX_INITIALIZER;
-    marfs_config* parent_config = config_init(config_path, &erasure_lock);    
+    pthread_mutex_t* erasure_lock = (pthread_mutex_t*) calloc(1, sizeof(pthread_mutex_t));
+    pthread_mutex_init(erasure_lock, NULL);
+
+    marfs_config* parent_config = config_init(config_path, erasure_lock);    
     marfs_position parent_position = { .ns = NULL, .depth = 0, .ctxt = NULL };
 
     if (config_establishposition(&parent_position, parent_config)) {
@@ -171,7 +174,7 @@ int main(int argc, char** argv) {
         return 1;
     }
  
-    ssize_t successful_spawns = 0;
+    size_t successful_spawns = 0;
 
     for (int index = 6; index < argc; index += 1) {
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
@@ -230,7 +233,7 @@ int main(int argc, char** argv) {
         child_position->depth = child_depth;
 
         thread_args* topdir_args = threadarg_init(threads_capacity_monitor, threads_countdown_monitor, 
-                parent_config, child_position, output_table, &ht_lock, next_basepath);
+                parent_config, erasure_lock, child_position, output_table, ht_lock, next_basepath);
 
         pthread_t next_id;
         
@@ -244,60 +247,13 @@ int main(int argc, char** argv) {
     }
 
     countdown_monitor_windup(threads_countdown_monitor, successful_spawns);
-    countdown_monitor_wait(threads_countdown_monitor); // Will ensure that all child threads, including children of children, have returned before resuming execution
 
-    /*
-     * A "redundancy" measure to wait on threads if absolutely necessary.
-     * The reader-writer lock will be successfully acquired (and, therefore, 
-     * the hashtable contents printed to output) if and only if the lock is 
-     * available AND no writers are blocked on the lock.
-     */
-    pthread_rwlock_rdlock(&ht_lock);
-    hashtable_dump(output_table, output_ptr);
-    pthread_rwlock_unlock(&ht_lock);
-
-    // An emergency bounded wait if all child threads (including children of children)
-    // somehow cannot be verified to have exited through the countdown_monitor functions.
-    if (countdown_monitor_destroy(threads_countdown_monitor) && (errno == EBUSY)) {
-        LOG(LOG_WARNING, "Wait on countdown monitor unsuccessful--attempting another bounded wait. (%s)\n", strerror(errno));
-
-        int finished_waiting = 0;
-        int attempts = 0;
-
-        while (!finished_waiting && (attempts < ATTEMPTS_MAX)) {
-            pthread_mutex_lock(threads_countdown_monitor->lock);
-
-            if (threads_countdown_monitor->active == 0) {
-                finished_waiting = 1;
-                pthread_mutex_unlock(threads_countdown_monitor->lock);
-            } else {
-                pthread_mutex_unlock(threads_countdown_monitor->lock);
-                attempts += 1;
-                sched_yield();
-            }
-        }
-
-        countdown_monitor_destroy(threads_countdown_monitor);
-    }
-
-    monitor_destroy(threads_capacity_monitor);
- 
-    if (fclose(output_ptr)) {
-        LOG(LOG_WARNING, "Failed to close output file pointer! (%s)\n", strerror(errno));
-    }
-
-    hashtable_destroy(output_table);
+    pthread_detach(pthread_self());
 
     if (config_abandonposition(&parent_position)) {
         LOG(LOG_WARNING, "Failed to abandon parent position!\n");
     }
 
-    if (config_term(parent_config)) {
-        LOG(LOG_WARNING, "Failed to terminate marfs_config!\n");
-    }
-
-    pthread_mutex_destroy(&erasure_lock);
-
-    return 0;
+    pthread_exit(NULL);
 
 }

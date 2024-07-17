@@ -88,17 +88,15 @@ int monitor_destroy(capacity_monitor_t* monitor);
 typedef struct countdown_monitor_struct countdown_monitor_t;
 
 typedef struct countdown_monitor_struct {
-    ssize_t active;
+    size_t active;
     pthread_mutex_t* lock;
 } countdown_monitor_t;
 
 countdown_monitor_t* countdown_monitor_init(void);
 
-int countdown_monitor_windup(countdown_monitor_t* ctdwn_monitor, ssize_t amount);
+int countdown_monitor_windup(countdown_monitor_t* ctdwn_monitor, size_t amount);
 
-int countdown_monitor_decrement(countdown_monitor_t* ctdwn_monitor);
-
-int countdown_monitor_wait(countdown_monitor_t* ctdwn_monitor);
+int countdown_monitor_decrement(countdown_monitor_t* ctdwn_monitor, size_t* active_snapshot);
 
 int countdown_monitor_destroy(countdown_monitor_t* ctdwn_monitor);
 

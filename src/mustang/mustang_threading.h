@@ -97,11 +97,13 @@ typedef struct thread_args_struct {
 
     // MarFS context components for this thread: position and config
     marfs_config* base_config;
+    pthread_mutex_t* config_erasure_lock;
     marfs_position* base_position;
 
     // Synchronization for the output hashtable of object names
     hashtable* hashtable;
-    pthread_rwlock_t* hashtable_lock;
+    pthread_mutex_t* hashtable_lock;
+    FILE* hashtable_output_ptr;
 
     // After a verify_active_threads() call to put the thread to sleep as
     // needed until room is available, This will be the path that the new
@@ -120,8 +122,9 @@ typedef struct thread_args_struct {
  */
 thread_args* threadarg_init(capacity_monitor_t* new_active_threads_mtr, 
         countdown_monitor_t* new_ctdwn_mtr, marfs_config* shared_config, 
-        marfs_position* shared_position, hashtable* new_hashtable, 
-        pthread_rwlock_t* new_ht_lock, char* new_basepath);
+        pthread_mutex_t* shared_erasure_lock, marfs_position* shared_position, 
+        hashtable* new_hashtable, pthread_mutex_t* new_ht_lock, 
+        FILE* new_output_ptr, char* new_basepath);
 
 /** 
  * Given a thread's arguments and new inputs for thread marfs_position and

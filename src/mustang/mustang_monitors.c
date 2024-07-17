@@ -224,8 +224,8 @@ countdown_monitor_t* countdown_monitor_init(void) {
     return new_ctdwn_monitor;
 }
 
-int countdown_monitor_windup(countdown_monitor_t* ctdwn_monitor, ssize_t amount) {
-    if ((ctdwn_monitor == NULL) || (amount < 0)) {
+int countdown_monitor_windup(countdown_monitor_t* ctdwn_monitor, size_t amount) {
+    if (ctdwn_monitor == NULL) {
         errno = EINVAL;
         return -1;
     }
@@ -238,8 +238,8 @@ int countdown_monitor_windup(countdown_monitor_t* ctdwn_monitor, ssize_t amount)
     return 0;
 }
 
-int countdown_monitor_decrement(countdown_monitor_t* ctdwn_monitor) {
-    if (ctdwn_monitor == NULL) {
+int countdown_monitor_decrement(countdown_monitor_t* ctdwn_monitor, size_t* active_snapshot) {
+    if ((ctdwn_monitor == NULL) || (active_snapshot == NULL)) {
         errno = EINVAL;
         return -1;
     }
@@ -247,30 +247,8 @@ int countdown_monitor_decrement(countdown_monitor_t* ctdwn_monitor) {
     pthread_mutex_lock(ctdwn_monitor->lock);
     ctdwn_monitor->active -= 1;
     LOG(LOG_DEBUG, "Countdown monitor active count is now: %zd\n", ctdwn_monitor->active);
+    *active_snapshot = ctdwn_monitor->active;
     pthread_mutex_unlock(ctdwn_monitor->lock);
-
-    return 0;
-}
-
-int countdown_monitor_wait(countdown_monitor_t* ctdwn_monitor) {
-    if (ctdwn_monitor == NULL) {
-        errno = EINVAL;
-        return -1;
-    }
-
-    int wait_complete = 0;
-
-    while (!wait_complete) {
-        pthread_mutex_lock(ctdwn_monitor->lock);
-        if (ctdwn_monitor->active == 0) {
-            wait_complete = 1;
-            pthread_mutex_unlock(ctdwn_monitor->lock);
-        } else {
-            pthread_mutex_unlock(ctdwn_monitor->lock); // spin approach
-            // TODO: possibly add nanosleep() call to yield scheduler
-            // sched_yield();
-        }
-    }
 
     return 0;
 }

@@ -151,7 +151,7 @@ void* thread_main(void* args) {
         // check reference chase for position struct's corresponding namespace (and list of subspaces within namespace)
         /* thread_position->ns->subnodes */
         if (thread_position->ns->subnodes) {
-            ssize_t successful_spawns = 0;
+            size_t successful_spawns = 0;
 
             for (size_t subnode_index = 0; subnode_index < thread_position->ns->subnodecount; subnode_index += 1) {
                 HASH_NODE current_subnode = (thread_position->ns->subnodes)[subnode_index];
@@ -197,7 +197,7 @@ void* thread_main(void* args) {
         char* file_ftagstr = NULL;
         char* retrieved_id = NULL;
 
-        ssize_t successful_subdir_spawns = 0;
+        size_t successful_subdir_spawns = 0;
 
         while (current_entry != NULL) {
             // Ignore dirents corresponding to "invalid" paths (reference tree,
@@ -371,8 +371,29 @@ void* thread_main(void* args) {
 
     interpret_flags(this_flags);
 
-    if (countdown_monitor_decrement(countdown_mtr)) {
+    size_t threads_alive;
+
+    if (countdown_monitor_decrement(countdown_mtr, &threads_alive)) {
         LOG(LOG_ERR, "Failed to decrement countdown monitor!\n");
+    }
+
+    if (threads_alive == 0) {
+        // Hashtable and associated shared state cleanup
+        pthread_mutex_lock(this_args->hashtable_lock);
+        hashtable_dump(this_args->hashtable, this_args->hashtable_output_ptr);
+        pthread_mutex_unlock(this_args->hashtable_lock);
+        hashtable_destroy(this_args->output_table);
+        pthread_mutex_destroy(this_args->hashtable_lock);
+        free(this_args->hashtable_lock);
+
+        // Begin monitors cleanup
+        monitor_destroy(this_args->active_threads_mtr);
+        countdown_monitor_destroy(countdown_mtr);
+
+        // Begin config cleanup
+        config_term(this_args->base_config);
+        pthread_mutex_destroy(this_args->config_erasure_lock);
+        free(this_args->config_erasure_lock);
     }
 
     id_cache_destroy(this_id_cache);

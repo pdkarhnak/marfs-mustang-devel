@@ -57,7 +57,13 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 */
 
 #include "hashtable.h"
-#include <string.h>
+#include "mustang_logging.h"
+
+#ifdef DEBUG_MUSTANG
+#define DEBUG DEBUG_MUSTANG
+#elif (defined DEBUG_ALL)
+#define DEBUG DEBUG_ALL
+#endif
 
 /** 
  * Internal hashing function: MurmurHash3_x64_128 by Austin Appleby. See
@@ -135,6 +141,10 @@ void hashtable_dump(hashtable* table, FILE* output) {
         if ((table->stored_nodes)[index] != NULL) {
             fprintf(output, "Index %zu:\t%s\n", index, (table->stored_nodes)[index]);
         }
+    }
+
+    if (fclose(output)) {
+        LOG(LOG_WARNING, "Failed to close output file! (%s)\n", strerror(errno));
     }
 }
 
