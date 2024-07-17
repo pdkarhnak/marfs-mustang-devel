@@ -114,8 +114,7 @@ RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_p
 
     if (createcode != 0) {
         flags |= PTHREAD_CREATE_FAILED;
-        free(new_args->basepath);
-        threadarg_destroy(existing);
+        threadarg_destroy(new_args);
     }
 
     return flags;
@@ -124,6 +123,7 @@ RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_p
 int threadarg_destroy(thread_args* args) {
     int abandon_code = config_abandonposition(args->base_position);
     free(args->base_position);
+    free(args->basepath);
     args->active_threads_mtr = NULL;
     args->live_threads_mtr = NULL;
     args->base_config = NULL;

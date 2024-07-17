@@ -1,6 +1,8 @@
 #ifndef __MUSTANG_LOGGING__
 #define __MUSTANG_LOGGING__
 
+#include <string.h>
+
 #ifndef DEBUG_MUSTANG
 #define DEBUG_MUSTANG 1
 #endif

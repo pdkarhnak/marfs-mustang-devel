@@ -61,13 +61,14 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <errno.h>
 #include <sched.h>
 
+#include "mustang_logging.h"
+
 #ifdef DEBUG_MUSTANG
 #define DEBUG DEBUG_MUSTANG
 #elif (defined DEBUG_ALL)
 #define DEBUG DEBUG_ALL
 #endif
 
-#include "mustang_logging.h"
 #define LOG_PREFIX "mustang_monitors"
 #include <logging/logging.h>
 
@@ -94,6 +95,7 @@ capacity_monitor_t* monitor_init(size_t new_capacity) {
     errno = pthread_mutex_init(new_lock, NULL);
 
     if (errno) {
+        LOG(LOG_ERR, "Failed to initialize mutex for capacity monitor! (%s)\n", strerror(errno));
         free(new_monitor);
         free(new_lock);
         return NULL;
@@ -111,6 +113,7 @@ capacity_monitor_t* monitor_init(size_t new_capacity) {
     errno = pthread_cond_init(new_cv, NULL);
 
     if (errno) {
+        LOG(LOG_ERR, "Failed to initialize condition variable for capacity monitor! (%s)\n", strerror(errno));
         free(new_monitor);
         pthread_mutex_destroy(new_lock);
         free(new_lock);
@@ -204,6 +207,7 @@ countdown_monitor_t* countdown_monitor_init(void) {
     errno = pthread_mutex_init(new_lock, NULL);
 
     if (errno) {
+        LOG(LOG_ERR, "Failed to initialize mutex for countdown monitor! (%s)\n", strerror(errno));
         free(new_lock);
         return NULL;
     }
@@ -262,8 +266,9 @@ int countdown_monitor_wait(countdown_monitor_t* ctdwn_monitor) {
             wait_complete = 1;
             pthread_mutex_unlock(ctdwn_monitor->lock);
         } else {
-            pthread_mutex_unlock(ctdwn_monitor->lock);
-            sched_yield();
+            pthread_mutex_unlock(ctdwn_monitor->lock); // spin approach
+            // TODO: possibly add nanosleep() call to yield scheduler
+            // sched_yield();
         }
     }
 

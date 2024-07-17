@@ -10,6 +10,8 @@
 #include <config/config.h>
 #include <datastream/datastream.h>
 
+#include "mustang_logging.h"
+
 #ifdef DEBUG_MUSTANG
 #define DEBUG DEBUG_MUSTANG
 #elif (defined DEBUG_ALL)
@@ -23,7 +25,6 @@
 #define ATTEMPTS_MAX 128
 #endif
 
-#include "mustang_logging.h"
 #define LOG_PREFIX "mustang_engine"
 #include <logging/logging.h>
 
@@ -51,20 +52,26 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // FILE* log_ptr;
+
     // If stdout not being used for logging, redirect stdout and stderr to specified file
     if (strncmp(argv[5], "stderr", strlen("stderr")) != 0) {
         int log_fd = open(argv[5], O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
+        //log_ptr = freopen(argv[5], "w", stderr);
+
         if (dup2(log_fd, STDERR_FILENO) == -1) {
-            LOG(LOG_ERR, "Failed to redirect stderr to log file fd! (%s)\n", strerror(errno));
-            fclose(output_ptr);
-            close(log_fd);
-            return 1;
+            printf("Failed to redirect stderr! (%s)\n", strerror(errno));
         }
+        close(log_fd);
 
-        close(log_fd); // stdout and stderr have been redirected, so no need for the new fd
+        /*
+        if (log_ptr == NULL) {
+            // TODO:
+        }
+        */
+
     }
-
 
     char* invalid = NULL;
     size_t capacity_power = (size_t) strtol(argv[2], &invalid, 10);

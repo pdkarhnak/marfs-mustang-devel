@@ -70,13 +70,14 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include "mustang_retcode.h"
 #include "id_cache.h"
 
+#include "mustang_logging.h"
+
 #ifdef DEBUG_MUSTANG
 #define DEBUG DEBUG_MUSTANG
 #elif (defined DEBUG_ALL)
 #define DEBUG DEBUG_ALL
 #endif
 
-#include "mustang_logging.h"
 #define LOG_PREFIX "thread_main"
 #include <logging/logging.h>
 
@@ -374,8 +375,8 @@ void* thread_main(void* args) {
         LOG(LOG_ERR, "Failed to decrement countdown monitor!\n");
     }
 
-    thread_position = NULL;
     id_cache_destroy(this_id_cache);
+    threadarg_destroy(this_args);
 
     return NULL;
 
