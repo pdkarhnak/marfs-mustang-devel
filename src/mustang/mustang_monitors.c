@@ -232,7 +232,7 @@ int countdown_monitor_windup(countdown_monitor_t* ctdwn_monitor, size_t amount) 
 
     pthread_mutex_lock(ctdwn_monitor->lock);
     ctdwn_monitor->active += amount;
-    LOG(LOG_DEBUG, "Countdown monitor active count is now: %zd\n", ctdwn_monitor->active);
+    LOG(LOG_DEBUG, "Countdown monitor active count is now: %zu\n", ctdwn_monitor->active);
     pthread_mutex_unlock(ctdwn_monitor->lock);
 
     return 0;
