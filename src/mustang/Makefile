@@ -37,6 +37,9 @@ libmustang.a: mustang_monitors.o mustang_threading.o hashtable.o id_cache.o
 thread_main.o: thread_main.c mustang_logging.h
 	$(CC) $(CFLAGS) $(MARFS_INCLUDE) -c $< -llogging
 
+hashtable.o: hashtable.c hashtable.h
+	$(CC) $(CFLAGS) $(MARFS_INCLUDE) -c $< -llogging
+
 %.o: %.c %.h
 	$(CC) $(CFLAGS) $(MARFS_INCLUDE) $< -c $(LDLIBS)
 

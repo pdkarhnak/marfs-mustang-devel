@@ -111,10 +111,11 @@ void* thread_main(void* args) {
         interpret_flags(this_flags);
         
         monitor_vend(this_args->active_threads_mtr);
-        countdown_monitor_decrement(countdown_mtr);
+        size_t placeholder_active;
+        countdown_monitor_decrement(countdown_mtr, &placeholder_active);
         threadarg_destroy(this_args);
 
-        return NULL; 
+        pthread_exit(NULL); 
     }
 
     marfs_position* thread_position = this_args->base_position;
@@ -126,10 +127,11 @@ void* thread_main(void* args) {
         interpret_flags(this_flags);
         
         monitor_vend(this_args->active_threads_mtr);
-        countdown_monitor_decrement(countdown_mtr);
+        size_t placeholder_active;
+        countdown_monitor_decrement(countdown_mtr, &placeholder_active);
         threadarg_destroy(this_args);
 
-        return NULL;
+        pthread_exit(NULL);
     }
 
     // Define a convenient alias for this thread's relevant MDAL, from which 
@@ -318,9 +320,9 @@ void* thread_main(void* args) {
                     // and not attempting to add them to the hashtable again.                    
                     if (id_cache_probe(this_id_cache, retrieved_id) == 0) {
                         id_cache_add(this_id_cache, retrieved_id);
-                        pthread_rwlock_wrlock(this_args->hashtable_lock);
+                        pthread_mutex_lock(this_args->hashtable_lock);
                         put(this_args->hashtable, retrieved_id); // put() dupes string into new heap space
-                        pthread_rwlock_unlock(this_args->hashtable_lock);
+                        pthread_mutex_unlock(this_args->hashtable_lock);
                     }
 
                     free(retrieved_id);
@@ -382,7 +384,7 @@ void* thread_main(void* args) {
         pthread_mutex_lock(this_args->hashtable_lock);
         hashtable_dump(this_args->hashtable, this_args->hashtable_output_ptr);
         pthread_mutex_unlock(this_args->hashtable_lock);
-        hashtable_destroy(this_args->output_table);
+        hashtable_destroy(this_args->hashtable);
         pthread_mutex_destroy(this_args->hashtable_lock);
         free(this_args->hashtable_lock);
 
@@ -399,7 +401,7 @@ void* thread_main(void* args) {
     id_cache_destroy(this_id_cache);
     threadarg_destroy(this_args);
 
-    return NULL;
+    pthread_exit(NULL);
 
 }
 

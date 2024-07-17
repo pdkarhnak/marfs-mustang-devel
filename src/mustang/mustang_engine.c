@@ -233,7 +233,7 @@ int main(int argc, char** argv) {
         child_position->depth = child_depth;
 
         thread_args* topdir_args = threadarg_init(threads_capacity_monitor, threads_countdown_monitor, 
-                parent_config, erasure_lock, child_position, output_table, ht_lock, next_basepath);
+                parent_config, erasure_lock, child_position, output_table, ht_lock, output_ptr, next_basepath);
 
         pthread_t next_id;
         

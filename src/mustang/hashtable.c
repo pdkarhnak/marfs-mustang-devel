@@ -58,12 +58,16 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 
 #include "hashtable.h"
 #include "mustang_logging.h"
+#include <errno.h>
 
 #ifdef DEBUG_MUSTANG
 #define DEBUG DEBUG_MUSTANG
 #elif (defined DEBUG_ALL)
 #define DEBUG DEBUG_ALL
 #endif
+
+#define LOG_PREFIX "hashtable"
+#include <logging/logging.h>
 
 /** 
  * Internal hashing function: MurmurHash3_x64_128 by Austin Appleby. See
