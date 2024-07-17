@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <pthread.h>
+#include <signal.h>
 #include <marfs.h>
 #include <config/config.h>
 #include <datastream/datastream.h>
@@ -34,6 +35,18 @@
 
 extern void* thread_main(void* args);
 size_t id_cache_capacity;
+static int signal_received; // Declared here in global scope to be accessible to signal handler, but visible only to this file with "static" qualifier
+
+static void engine_handler(int signum) {
+    if (signum == SIGUSR1) {
+        signal_received = 1;
+        return;
+    } else {
+        LOG(LOG_ERR, "Received signal %d! Terminating...\n", signum);
+        _exit(1); // Kill the whole process if a signal received (e.g., SIGINT or SIGTERM) as a best-practice.
+        // Except for application-specific SIGUSR1 usage, all other signals likely to be deadly
+    }
+}
 
 int main(int argc, char** argv) {
 
@@ -44,6 +57,17 @@ int main(int argc, char** argv) {
         printf("\tHINT: see mustang wrapper or invoke \"mustang -h\" for more details.\n");
         return 1;
     } 
+
+    // TODO: set up signal handler here
+    struct sigaction main_sigaction;
+    main_sigaction.sa_handler = engine_handler;
+    sigemptyset(&main_sigaction.sa_mask);
+    main_sigaction.sa_flags = SA_RESTART;
+
+    if (sigaction(SIGUSR1, &main_sigaction, NULL)) {
+        LOG(LOG_ERR, "Failed to initialize signal handler for engine! (%s)\n", strerror(errno));
+        return 1;
+    }
 
     FILE* output_ptr = fopen(argv[4], "w");
 
@@ -58,19 +82,11 @@ int main(int argc, char** argv) {
     if (strncmp(argv[5], "stderr", strlen("stderr")) != 0) {
         int log_fd = open(argv[5], O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
-        //log_ptr = freopen(argv[5], "w", stderr);
-
         if (dup2(log_fd, STDERR_FILENO) == -1) {
             printf("Failed to redirect stderr! (%s)\n", strerror(errno));
         }
+
         close(log_fd);
-
-        /*
-        if (log_ptr == NULL) {
-            // TODO:
-        }
-        */
-
     }
 
     char* invalid = NULL;
@@ -138,25 +154,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    parent_child_monitor_t* parent_child_monitor = pc_monitor_init();
+    // "Wind up" the countdown monitor initially by one to indicate that the main thread is "alive" (i.e., actively performing critical computation/setup)
+    countdown_monitor_windup(threads_countdown_monitor, 1);
 
-    if (parent_child_monitor == NULL) {
-        LOG(LOG_ERR, "Failed to initialize parent-child monitor! (%s)\n", strerror(errno));
-        fclose(output_ptr);
-        return 1;
-    }
-
-    /*
-     * Reader-writer lock gives priority to writers (i.e., child threads) for
-     * interactions with the hashtable.
-     * When the parent eventually reads the hashtable to print its contents to 
-     * output, the parent will successfully acquire the lock if and only if
-     * the lock is available AND no writers are blocked on the lock.
-     *
-     * See usage below around hashtable_dump() call.
-     */
-    pthread_mutex_t* ht_lock = (pthread_mutex_t*) calloc(1, sizeof(pthread_mutex_t));
-    pthread_mutex_init(ht_lock, NULL);
+    pthread_mutex_t ht_lock = PTHREAD_MUTEX_INITIALIZER;
 
     char* config_path = getenv("MARFS_CONFIG_PATH");
 
@@ -165,10 +166,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    pthread_mutex_t* erasure_lock = (pthread_mutex_t*) calloc(1, sizeof(pthread_mutex_t));
-    pthread_mutex_init(erasure_lock, NULL);
+    pthread_mutex_t erasure_lock = PTHREAD_MUTEX_INITIALIZER;
 
-    marfs_config* parent_config = config_init(config_path, erasure_lock);    
+    marfs_config* parent_config = config_init(config_path, &erasure_lock);    
     marfs_position parent_position = { .ns = NULL, .depth = 0, .ctxt = NULL };
 
     if (config_establishposition(&parent_position, parent_config)) {
@@ -181,8 +181,6 @@ int main(int argc, char** argv) {
         config_abandonposition(&parent_position);
         return 1;
     }
- 
-    size_t successful_spawns = 0;
 
     for (int index = 6; index < argc; index += 1) {
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
@@ -240,27 +238,59 @@ int main(int argc, char** argv) {
 
         child_position->depth = child_depth;
 
-        thread_args* topdir_args = threadarg_init(threads_capacity_monitor, threads_countdown_monitor, parent_child_monitor,
-                parent_config, erasure_lock, child_position, output_table, ht_lock, output_ptr, next_basepath);
+        thread_args* topdir_args = threadarg_init(threads_capacity_monitor, threads_countdown_monitor, 
+                parent_config, child_position, output_table, &ht_lock, next_basepath, pthread_self());
 
         pthread_t next_id;
+        countdown_monitor_windup(threads_countdown_monitor, 1);
         
-        if (pthread_create(&next_id, NULL, &thread_main, (void*) topdir_args) == 0) {
-            successful_spawns += 1; 
-            LOG(LOG_INFO, "Created top-level thread with ID: %0lx and basepath \"%s\"\n", SHORT_ID(next_id), next_basepath);
-        } else {
+        if (pthread_create(&next_id, NULL, &thread_main, (void*) topdir_args)) {
             LOG(LOG_ERR, "Failed to create top-level thread with target \"%s\"! (%s)\n", argv[index], strerror(errno));
+            countdown_monitor_decrement(threads_countdown_monitor, NULL);
+        } else {
+            LOG(LOG_INFO, "Created top-level thread with ID: %0lx and basepath \"%s\"\n", SHORT_ID(next_id), next_basepath);
         }
 
     }
 
-    countdown_monitor_windup(threads_countdown_monitor, successful_spawns);
-
     pthread_detach(pthread_self());
+
+    size_t threads_alive;
+    if (countdown_monitor_decrement(threads_countdown_monitor, &threads_alive)) {
+        LOG(LOG_ERR, "Failed to decrement countdown monitor from parent!\n");
+    }
+
+    if (threads_alive == 0) {
+        pthread_kill(pthread_self(), SIGUSR1);
+    } else {
+        // If there are other threads alive in the program besides us and they have not signaled us with SIGUSR1 between checking the number of live threads and now), then put the engine to sleep until we are signaled.
+        if (!signal_received) {
+            pause();
+        }
+    }
+
+    // Child threads *should* be guaranteed to have all exited by this point
+
+    pthread_mutex_lock(&ht_lock);
+    hashtable_dump(output_table, output_ptr);
+    pthread_mutex_unlock(&ht_lock);
+
+    // Clean up hashtable and associated lock state
+    hashtable_destroy(output_table);
+    pthread_mutex_destroy(&ht_lock);
+
+    monitor_destroy(threads_capacity_monitor);
+    countdown_monitor_destroy(threads_countdown_monitor);
 
     if (config_abandonposition(&parent_position)) {
         LOG(LOG_WARNING, "Failed to abandon parent position!\n");
     }
+
+    if (config_term(parent_config)) {
+        LOG(LOG_WARNING, "Failed to terminate parent config!\n");
+    }
+
+    pthread_mutex_destroy(&erasure_lock);
 
     pthread_exit(NULL);
 

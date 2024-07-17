@@ -62,6 +62,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <sys/types.h>
 #include <dirent.h>
 #include <errno.h>
+#include <signal.h>
 #include <mdal/mdal.h>
 #include <tagging/tagging.h>
 #include <datastream/datastream.h>
@@ -113,6 +114,11 @@ void* thread_main(void* args) {
         monitor_vend(this_args->active_threads_mtr);
         size_t placeholder_active;
         countdown_monitor_decrement(countdown_mtr, &placeholder_active);
+
+        if (placeholder_active == 0) {
+            pthread_kill(this_args->parent_id, SIGUSR1);
+        }
+
         threadarg_destroy(this_args);
 
         pthread_exit(NULL); 
@@ -129,6 +135,11 @@ void* thread_main(void* args) {
         monitor_vend(this_args->active_threads_mtr);
         size_t placeholder_active;
         countdown_monitor_decrement(countdown_mtr, &placeholder_active);
+
+        if (placeholder_active == 0) {
+            pthread_kill(this_args->parent_id, SIGUSR1);
+        }
+
         threadarg_destroy(this_args);
 
         pthread_exit(NULL);
@@ -153,7 +164,6 @@ void* thread_main(void* args) {
         // check reference chase for position struct's corresponding namespace (and list of subspaces within namespace)
         /* thread_position->ns->subnodes */
         if (thread_position->ns->subnodes) {
-            size_t successful_spawns = 0;
 
             for (size_t subnode_index = 0; subnode_index < thread_position->ns->subnodecount; subnode_index += 1) {
                 HASH_NODE current_subnode = (thread_position->ns->subnodes)[subnode_index];
@@ -182,12 +192,9 @@ void* thread_main(void* args) {
 
                 if (ns_spawn_flags != RETCODE_SUCCESS) {
                     this_flags |= ns_spawn_flags;
-                } else {
-                    successful_spawns += 1;
                 }
-            }
 
-            countdown_monitor_windup(countdown_mtr, successful_spawns);
+            }
         }
     }
 
@@ -198,8 +205,6 @@ void* thread_main(void* args) {
 
         char* file_ftagstr = NULL;
         char* retrieved_id = NULL;
-
-        size_t successful_subdir_spawns = 0;
 
         while (current_entry != NULL) {
             // Ignore dirents corresponding to "invalid" paths (reference tree,
@@ -287,7 +292,6 @@ void* thread_main(void* args) {
                 if (spawn_flags != RETCODE_SUCCESS) {
                     this_flags |= spawn_flags;
                 } else {
-                    successful_subdir_spawns += 1;
                     LOG(LOG_DEBUG, "Forked new thread (ID: %0lx) at basepath %s\n", SHORT_ID(next_id), current_entry->d_name);
                 }
 
@@ -338,15 +342,6 @@ void* thread_main(void* args) {
             current_entry = thread_mdal->readdir(cwd_handle);
         }
 
-        // "Wind up" (i.e., add to) the countdown monitor according to the 
-        // number of threads actually spawned from this thread.
-        //
-        // With the usage pattern of windup-then-decrement, the "parent" 
-        // (i.e., thread which runs main() in mustang_engine.c) should be 
-        // appropriately forced to wait for all child threads to exit before 
-        // cleaning up shared state.
-        countdown_monitor_windup(countdown_mtr, successful_subdir_spawns);
-
         /* --- begin join and cleanup --- */
 
         // if FTAG cleanup somehow failed, ensure cleanup instead occurs here
@@ -379,24 +374,8 @@ void* thread_main(void* args) {
         LOG(LOG_ERR, "Failed to decrement countdown monitor!\n");
     }
 
-    if ((threads_alive == 0) && (pc_monitor_peek(this_args->pc_monitor) == 0)) {
-        // Hashtable and associated shared state cleanup
-        pthread_mutex_lock(this_args->hashtable_lock);
-        hashtable_dump(this_args->hashtable, this_args->hashtable_output_ptr);
-        pthread_mutex_unlock(this_args->hashtable_lock);
-        hashtable_destroy(this_args->hashtable);
-        pthread_mutex_destroy(this_args->hashtable_lock);
-        free(this_args->hashtable_lock);
-
-        // Begin monitors cleanup
-        monitor_destroy(this_args->active_threads_mtr);
-        countdown_monitor_destroy(countdown_mtr);
-        pc_monitor_destroy(this_args->pc_monitor);
-
-        // Begin config cleanup
-        config_term(this_args->base_config);
-        pthread_mutex_destroy(this_args->config_erasure_lock);
-        free(this_args->config_erasure_lock);
+    if (threads_alive == 0) {
+        pthread_kill(this_args->parent_id, SIGUSR1);
     }
 
     id_cache_destroy(this_id_cache);

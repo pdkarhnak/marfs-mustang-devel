@@ -95,27 +95,21 @@ typedef struct thread_args_struct {
      */
     countdown_monitor_t* live_threads_mtr;
 
-    /** 
-     * A monitor to ensure that the parent has "taken its turn" in adding to
-     * the live threads monitor before a thread can take cleanup actions when 
-     * it sees that the live threads monitor apparently reads zero.
-     */
-    parent_child_monitor_t* pc_monitor;
-
     // MarFS context components for this thread: position and config
     marfs_config* base_config;
-    pthread_mutex_t* config_erasure_lock;
     marfs_position* base_position;
 
     // Synchronization for the output hashtable of object names
     hashtable* hashtable;
     pthread_mutex_t* hashtable_lock;
-    FILE* hashtable_output_ptr;
 
     // After a verify_active_threads() call to put the thread to sleep as
     // needed until room is available, This will be the path that the new
     // thread opens.
     char* basepath; 
+
+    // Used for signaling purposes if threads are the last in the program and need to message-pass to the parent thread (i.e., the thread that runs main()).
+    pthread_t parent_id;
 
 } thread_args;
 
@@ -123,16 +117,15 @@ typedef struct thread_args_struct {
  * Initialize a new argument struct in preparation for the creation of a new
  * thread. This creates a thread_args struct "from scratch" and is intended to
  * be used in the "top-level" thread (the thread which runs main). Due to the 
- * considerable amount of shared state between all threads, threadarg_fork() 
+ * considerable amount of shared state between all threads, mustang_spawn() 
  * is used as documented below for all other thread creation occurring in 
  * threads besides the top-level thread.
  */
 thread_args* threadarg_init(capacity_monitor_t* new_active_threads_mtr, 
-        countdown_monitor_t* new_ctdwn_mtr, parent_child_monitor_t* new_pc_monitor,
-        marfs_config* shared_config, pthread_mutex_t* shared_erasure_lock, 
+        countdown_monitor_t* new_ctdwn_mtr, marfs_config* shared_config, 
         marfs_position* shared_position, hashtable* new_hashtable, 
-        pthread_mutex_t* new_ht_lock, FILE* new_output_ptr, 
-        char* new_basepath);
+        pthread_mutex_t* new_ht_lock, char* new_basepath, 
+        pthread_t parent_thread_id);
 
 /** 
  * Given a thread's arguments and new inputs for thread marfs_position and

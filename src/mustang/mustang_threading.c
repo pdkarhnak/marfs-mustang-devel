@@ -70,11 +70,10 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #endif
 
 thread_args* threadarg_init(capacity_monitor_t* new_active_threads_mtr, 
-        countdown_monitor_t* new_ctdwn_mtr, parent_child_monitor_t* new_pc_monitor, 
-        marfs_config* shared_config, pthread_mutex_t* shared_erasure_lock, 
+        countdown_monitor_t* new_ctdwn_mtr, marfs_config* shared_config, 
         marfs_position* shared_position, hashtable* new_hashtable, 
-        pthread_mutex_t* new_ht_lock, FILE* new_output_ptr, 
-        char* new_basepath) {
+        pthread_mutex_t* new_ht_lock, char* new_basepath, 
+        pthread_t new_parent_id) {
 
     thread_args* new_args = (thread_args*) calloc(1, sizeof(thread_args));
 
@@ -84,14 +83,12 @@ thread_args* threadarg_init(capacity_monitor_t* new_active_threads_mtr,
 
     new_args->active_threads_mtr = new_active_threads_mtr;
     new_args->live_threads_mtr = new_ctdwn_mtr;
-    new_args->pc_monitor = new_pc_monitor;
     new_args->base_config = shared_config;
-    new_args->config_erasure_lock = shared_erasure_lock;
     new_args->base_position = shared_position;
     new_args->hashtable = new_hashtable;
     new_args->hashtable_lock = new_ht_lock;
-    new_args->hashtable_output_ptr = new_output_ptr;
     new_args->basepath = new_basepath;
+    new_args->parent_id = new_parent_id;
 
     return new_args;
 }
@@ -108,20 +105,21 @@ RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_p
 
     new_args->active_threads_mtr = existing->active_threads_mtr;
     new_args->live_threads_mtr = existing->live_threads_mtr;
-    new_args->pc_monitor = existing->pc_monitor;
     new_args->base_config = existing->base_config;
-    new_args->config_erasure_lock = existing->config_erasure_lock;
     new_args->base_position = new_position;
     new_args->hashtable = existing->hashtable;
     new_args->hashtable_lock = existing->hashtable_lock;
-    new_args->hashtable_output_ptr = existing->hashtable_output_ptr;
     new_args->basepath = new_basepath;
+    new_args->parent_id = existing->parent_id;
+
+    countdown_monitor_windup(existing->live_threads_mtr, 1);
 
     int createcode = pthread_create(thread_id, NULL, &thread_main, (void*) new_args);
 
     if (createcode != 0) {
         flags |= PTHREAD_CREATE_FAILED;
         threadarg_destroy(new_args);
+        countdown_monitor_decrement(existing->live_threads_mtr, NULL);
     }
 
     return flags;
@@ -130,19 +128,18 @@ RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_p
 int threadarg_destroy(thread_args* args) {
     int abandon_code = config_abandonposition(args->base_position);
     free(args->base_position);
-    args->base_position = NULL;
-    args->base_config = NULL;
-    args->config_erasure_lock = NULL;
-    
-    free(args->basepath);
-    args->basepath = NULL;
-    
+
     args->active_threads_mtr = NULL;
     args->live_threads_mtr = NULL;
 
+    args->base_position = NULL;
+    args->base_config = NULL;
     args->hashtable = NULL;
     args->hashtable_lock = NULL;
-    args->hashtable_output_ptr = NULL;
+    
+    free(args->basepath);
+    args->basepath = NULL;
+    args->parent_id = 0;
 
     free(args);
 
