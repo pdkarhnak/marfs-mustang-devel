@@ -143,7 +143,7 @@ int monitor_procure(capacity_monitor_t* monitor) {
 
     monitor->active += 1;
 
-    LOG(LOG_DEBUG, "Monitor value is now: %zu\n", monitor->active);
+    // LOG(LOG_DEBUG, "Monitor value is now: %zu\n", monitor->active);
 
     pthread_mutex_unlock(monitor->lock);
 
@@ -158,7 +158,7 @@ int monitor_vend(capacity_monitor_t* monitor) {
 
     pthread_mutex_lock(monitor->lock);
     monitor->active -= 1;
-    LOG(LOG_DEBUG, "Monitor value is now: %zu\n", monitor->active);
+    // LOG(LOG_DEBUG, "Monitor value is now: %zu\n", monitor->active);
     pthread_cond_broadcast(monitor->cv);
     pthread_mutex_unlock(monitor->lock);
 
@@ -232,7 +232,7 @@ int countdown_monitor_windup(countdown_monitor_t* ctdwn_monitor, size_t amount) 
 
     pthread_mutex_lock(ctdwn_monitor->lock);
     ctdwn_monitor->active += amount;
-    LOG(LOG_DEBUG, "Countdown monitor active count is now: %zu\n", ctdwn_monitor->active);
+    // LOG(LOG_DEBUG, "Countdown monitor active count is now: %zu\n", ctdwn_monitor->active);
     pthread_mutex_unlock(ctdwn_monitor->lock);
 
     return 0;
@@ -246,7 +246,7 @@ int countdown_monitor_decrement(countdown_monitor_t* ctdwn_monitor, size_t* acti
 
     pthread_mutex_lock(ctdwn_monitor->lock);
     ctdwn_monitor->active -= 1;
-    LOG(LOG_DEBUG, "Countdown monitor active count is now: %zd\n", ctdwn_monitor->active);
+    // LOG(LOG_DEBUG, "Countdown monitor active count is now: %zd\n", ctdwn_monitor->active);
     if (active_snapshot != NULL) {
         *active_snapshot = ctdwn_monitor->active;
     }

@@ -139,7 +139,7 @@ thread_args* threadarg_init(capacity_monitor_t* new_active_threads_mtr,
  *   RETCODE_FLAGS == RETCODE_SUCCESS, *thread_id contains a valid pthread_t on 
  *   return which may be joined.
  */
-RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_position* new_position, char* new_basepath);
+RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, pthread_attr_t* child_attributes, marfs_position* new_position, char* new_basepath);
 
 /**
  * Destroy a thread's arguments at the conclusion of a thread's run. This must

@@ -160,6 +160,19 @@ void* thread_main(void* args) {
         cwd_ok = 0;
     }
 
+    pthread_attr_t child_attributes_template;
+    pthread_attr_t* attr_ptr = &child_attributes_template;
+
+    if (pthread_attr_init(attr_ptr)) {
+        LOG(LOG_WARNING, "Failed to initialize child attributes!\n");
+        attr_ptr = NULL;
+    }
+
+    if (pthread_attr_setstacksize(attr_ptr, PTHREAD_STACK_MIN)) {
+        LOG(LOG_WARNING, "Failed to initialize child stack size! (%s)\n", strerror(errno));
+        attr_ptr = NULL;
+    }
+
     if (thread_position->depth == 0) {
         // check reference chase for position struct's corresponding namespace (and list of subspaces within namespace)
         /* thread_position->ns->subnodes */
@@ -188,7 +201,7 @@ void* thread_main(void* args) {
                 }
 
                 pthread_t next_ns_thread;
-                RETCODE_FLAGS ns_spawn_flags = mustang_spawn(this_args, &next_ns_thread, child_ns_position, child_ns_path);
+                RETCODE_FLAGS ns_spawn_flags = mustang_spawn(this_args, &next_ns_thread, attr_ptr, child_ns_position, child_ns_path);
 
                 if (ns_spawn_flags != RETCODE_SUCCESS) {
                     this_flags |= ns_spawn_flags;
@@ -287,7 +300,7 @@ void* thread_main(void* args) {
                 child_position->depth = new_depth;
 
                 pthread_t next_id;
-                RETCODE_FLAGS spawn_flags = mustang_spawn(this_args, &next_id, child_position, new_basepath);
+                RETCODE_FLAGS spawn_flags = mustang_spawn(this_args, &next_id, attr_ptr, child_position, new_basepath);
 
                 if (spawn_flags != RETCODE_SUCCESS) {
                     this_flags |= spawn_flags;
@@ -360,6 +373,10 @@ void* thread_main(void* args) {
 
     if (thread_mdal->closedir(cwd_handle)) {
         this_flags |= CLOSEDIR_FAILED;
+    }
+
+    if (attr_ptr != NULL) {
+        pthread_attr_destroy(attr_ptr);
     }
 
     if (monitor_vend(this_args->active_threads_mtr)) {

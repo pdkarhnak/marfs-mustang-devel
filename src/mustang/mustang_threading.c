@@ -93,7 +93,7 @@ thread_args* threadarg_init(capacity_monitor_t* new_active_threads_mtr,
     return new_args;
 }
 
-RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_position* new_position, char* new_basepath) {
+RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, pthread_attr_t* child_attributes, marfs_position* new_position, char* new_basepath) {
     RETCODE_FLAGS flags = RETCODE_SUCCESS;
 
     thread_args* new_args = (thread_args*) calloc(1, sizeof(thread_args));
@@ -114,7 +114,7 @@ RETCODE_FLAGS mustang_spawn(thread_args* existing, pthread_t* thread_id, marfs_p
 
     countdown_monitor_windup(existing->live_threads_mtr, 1);
 
-    int createcode = pthread_create(thread_id, NULL, &thread_main, (void*) new_args);
+    int createcode = pthread_create(thread_id, child_attributes, &thread_main, (void*) new_args);
 
     if (createcode != 0) {
         flags |= PTHREAD_CREATE_FAILED;

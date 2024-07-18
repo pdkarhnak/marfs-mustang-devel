@@ -182,6 +182,18 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    pthread_attr_t child_attr_template;
+    
+    if (pthread_attr_init(&child_attr_template)) {
+        LOG(LOG_ERR, "Failed to initialize attributes for child threads!\n");
+        return 1;
+    }
+
+    if (pthread_attr_setstacksize(&child_attr_template, PTHREAD_STACK_MIN)) {
+        LOG(LOG_ERR, "Failed to set stack size for child threads! (%s)\n", strerror(errno));
+        return 1;
+    }
+
     for (int index = 6; index < argc; index += 1) {
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
 
@@ -244,7 +256,7 @@ int main(int argc, char** argv) {
         pthread_t next_id;
         countdown_monitor_windup(threads_countdown_monitor, 1);
         
-        if (pthread_create(&next_id, NULL, &thread_main, (void*) topdir_args)) {
+        if (pthread_create(&next_id, &child_attr_template, &thread_main, (void*) topdir_args)) {
             LOG(LOG_ERR, "Failed to create top-level thread with target \"%s\"! (%s)\n", argv[index], strerror(errno));
             countdown_monitor_decrement(threads_countdown_monitor, NULL);
         } else {
