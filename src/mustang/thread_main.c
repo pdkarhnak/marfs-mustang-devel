@@ -168,7 +168,7 @@ void* thread_main(void* args) {
         attr_ptr = NULL;
     }
 
-    if (pthread_attr_setstacksize(attr_ptr, PTHREAD_STACK_MIN)) {
+    if (pthread_attr_setstacksize(attr_ptr, 2 * PTHREAD_STACK_MIN)) {
         LOG(LOG_WARNING, "Failed to initialize child stack size! (%s)\n", strerror(errno));
         attr_ptr = NULL;
     }

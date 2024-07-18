@@ -189,7 +189,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    if (pthread_attr_setstacksize(&child_attr_template, PTHREAD_STACK_MIN)) {
+    if (pthread_attr_setstacksize(&child_attr_template, 2 * PTHREAD_STACK_MIN)) {
         LOG(LOG_ERR, "Failed to set stack size for child threads! (%s)\n", strerror(errno));
         return 1;
     }
@@ -286,6 +286,8 @@ int main(int argc, char** argv) {
     pthread_mutex_lock(&ht_lock);
     hashtable_dump(output_table, output_ptr);
     pthread_mutex_unlock(&ht_lock);
+
+    pthread_attr_destroy(&child_attr_template);
 
     // Clean up hashtable and associated lock state
     hashtable_destroy(output_table);
