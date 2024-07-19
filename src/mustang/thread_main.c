@@ -94,31 +94,13 @@ void* thread_main(void* args) {
 
     thread_args* this_args = (thread_args*) args;
 
-    if (monitor_procure(this_args->active_threads_mtr)) {
-        // NOTE for logging calls: this macro wraps a vprintf() call to stderr,
-        // which will lock around the actual writing---no extra locking needed
-        LOG(LOG_ERR, "Failed to wait on active threads monitor!\n"); 
-    }
-
-    countdown_monitor_t* countdown_mtr = this_args->live_threads_mtr;
-
     id_cache* this_id_cache = id_cache_init(id_cache_capacity);
 
     RETCODE_FLAGS this_flags = RETCODE_SUCCESS;
 
     if (this_id_cache == NULL) {
         this_flags |= ALLOC_FAILED;
-
         interpret_flags(this_flags);
-        
-        monitor_vend(this_args->active_threads_mtr);
-        size_t placeholder_active;
-        countdown_monitor_decrement(countdown_mtr, &placeholder_active);
-
-        if (placeholder_active == 0) {
-            pthread_kill(this_args->parent_id, SIGUSR1);
-        }
-
         threadarg_destroy(this_args);
 
         pthread_exit(NULL); 
@@ -129,17 +111,7 @@ void* thread_main(void* args) {
     // Attempt to fortify the thread's position (if not already fortified) and check for errors
     if ((thread_position->ctxt == NULL) && config_fortifyposition(thread_position)) {
         this_flags |= FORTIFYPOS_FAILED;
-
         interpret_flags(this_flags);
-        
-        monitor_vend(this_args->active_threads_mtr);
-        size_t placeholder_active;
-        countdown_monitor_decrement(countdown_mtr, &placeholder_active);
-
-        if (placeholder_active == 0) {
-            pthread_kill(this_args->parent_id, SIGUSR1);
-        }
-
         threadarg_destroy(this_args);
 
         pthread_exit(NULL);
@@ -158,19 +130,6 @@ void* thread_main(void* args) {
         LOG(LOG_ERR, "Failed to open current directory for reading (%s)\n", strerror(errno));
         this_flags |= OPENDIR_FAILED;
         cwd_ok = 0;
-    }
-
-    pthread_attr_t child_attributes_template;
-    pthread_attr_t* attr_ptr = &child_attributes_template;
-
-    if (pthread_attr_init(attr_ptr)) {
-        LOG(LOG_WARNING, "Failed to initialize child attributes!\n");
-        attr_ptr = NULL;
-    }
-
-    if (pthread_attr_setstacksize(attr_ptr, 2 * PTHREAD_STACK_MIN)) {
-        LOG(LOG_WARNING, "Failed to initialize child stack size! (%s)\n", strerror(errno));
-        attr_ptr = NULL;
     }
 
     if (thread_position->depth == 0) {
@@ -201,6 +160,7 @@ void* thread_main(void* args) {
                 }
 
                 pthread_t next_ns_thread;
+                // TODO: replace with task creation and enqueue call in new thread pool-based implementation
                 RETCODE_FLAGS ns_spawn_flags = mustang_spawn(this_args, &next_ns_thread, attr_ptr, child_ns_position, child_ns_path);
 
                 if (ns_spawn_flags != RETCODE_SUCCESS) {
@@ -300,6 +260,7 @@ void* thread_main(void* args) {
                 child_position->depth = new_depth;
 
                 pthread_t next_id;
+                // TODO: replace with task creation and enqueue call
                 RETCODE_FLAGS spawn_flags = mustang_spawn(this_args, &next_id, attr_ptr, child_position, new_basepath);
 
                 if (spawn_flags != RETCODE_SUCCESS) {
@@ -375,25 +336,7 @@ void* thread_main(void* args) {
         this_flags |= CLOSEDIR_FAILED;
     }
 
-    if (attr_ptr != NULL) {
-        pthread_attr_destroy(attr_ptr);
-    }
-
-    if (monitor_vend(this_args->active_threads_mtr)) {
-        LOG(LOG_ERR, "Failed to broadcast on active threads monitor!\n");
-    }
-
     interpret_flags(this_flags);
-
-    size_t threads_alive;
-
-    if (countdown_monitor_decrement(countdown_mtr, &threads_alive)) {
-        LOG(LOG_ERR, "Failed to decrement countdown monitor!\n");
-    }
-
-    if (threads_alive == 0) {
-        pthread_kill(this_args->parent_id, SIGUSR1);
-    }
 
     id_cache_destroy(this_id_cache);
     threadarg_destroy(this_args);
