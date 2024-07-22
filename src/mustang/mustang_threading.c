@@ -64,10 +64,22 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <errno.h>
 #include <tagging/tagging.h>
 #include "mustang_threading.h"
+#include "task_queue.h"
+#include "id_cache.h"
 
 #ifndef ENOATTR
 #define ENOATTR ENODATA
 #endif
+
+#ifdef DEBUG_MUSTANG
+#define DEBUG DEBUG_MUSTANG
+#elif (defined DEBUG_ALL)
+#define DEBUG DEBUG_ALL
+#endif
+
+#define LOG_PREFIX "mustang_threading"
+#include "mustang_logging.h"
+#include <logging/logging.h>
 
 char* get_ftag(marfs_position* current_position, MDAL current_mdal, char* path) {
     MDAL_FHANDLE target_handle = current_mdal->open(current_position->ctxt, path, O_RDONLY);
@@ -296,7 +308,6 @@ void traverse_dir(marfs_config* base_config, marfs_position* task_position, hash
     }
 
     free(task_position);
-
 }
 
 void traverse_ns(marfs_config* base_config, marfs_position* task_position, hashtable* output_table, pthread_mutex_t* table_lock, task_queue* pool_queue) {

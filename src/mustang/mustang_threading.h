@@ -65,7 +65,6 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <config/config.h>
 #include <mdal/mdal.h>
 #include "hashtable.h"
-#include "mustang_retcode.h"
 
 extern const size_t id_cache_capacity;
 
