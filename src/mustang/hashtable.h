@@ -67,7 +67,6 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 
 typedef struct hashtable_struct {  
     size_t capacity;
-    size_t capacity_mask;
     char** stored_nodes;
 } hashtable;
 

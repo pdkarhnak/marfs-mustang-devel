@@ -79,14 +79,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    LOG(LOG_INFO, "Received queue capacity: %zu\n", (size_t) queue_capacity);
-
     if (queue_capacity < max_threads) {
         LOG(LOG_WARNING, "Task queue capacity is less than maximum number of threads (i.e., thread pool size), which will limit concurrency by not taking full advantage of the thread pool.\n");
         LOG(LOG_WARNING, "Consider passing a task queue capacity argument that is greater than or equal to the maximum number of threads so that all threads have the chance to dequeue at least one task.\n");
     }
-
-    return 0;
 
     invalid = NULL;
     long hashtable_capacity = strtol(argv[3], &invalid, 10);
@@ -246,12 +242,12 @@ int main(int argc, char** argv) {
             case 0:
                 mustang_task* top_ns_task = task_init(parent_config, new_task_position, output_table, &ht_lock, queue, &traverse_ns);
                 task_enqueue(queue, top_ns_task);
-                LOG(LOG_DEBUG, "Created top-level namespace traversal task at basepath: \"%s\"", next_basepath);
+                LOG(LOG_DEBUG, "Created top-level namespace traversal task at basepath: \"%s\"\n", next_basepath);
                 break;
             default:
                 mustang_task* top_dir_task = task_init(parent_config, new_task_position, output_table, &ht_lock, queue, &traverse_dir);
                 task_enqueue(queue, top_dir_task);
-                LOG(LOG_DEBUG, "Created top-level directory traversal task at basepath: \"%s\"", next_basepath);
+                LOG(LOG_DEBUG, "Created top-level directory traversal task at basepath: \"%s\"\n", next_basepath);
                 break;
         }
 
@@ -259,7 +255,7 @@ int main(int argc, char** argv) {
     }
 
     pthread_mutex_lock(queue->lock);
-    while ((queue->todos > 0) && (queue->size > 0)) {
+    while ((queue->todos > 0) || (queue->size > 0)) {
         pthread_cond_wait(queue->manager_cv, queue->lock);
     }
     pthread_mutex_unlock(queue->lock); 

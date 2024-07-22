@@ -78,7 +78,7 @@ void MurmurHash3_x64_128( const void* key, const int len, const uint32_t seed,
 uint64_t hashcode(hashtable* table, char* name) {
     uint64_t murmur_result[2];
     MurmurHash3_x64_128(name, strlen(name), KEY_SEED, murmur_result);
-    return murmur_result[0] & (table->capacity_mask);
+    return murmur_result[0] % (table->capacity);
 }
 
 hashtable* hashtable_init(size_t new_capacity) {
@@ -91,7 +91,6 @@ hashtable* hashtable_init(size_t new_capacity) {
     }
     
     new_table->capacity = new_capacity;
-    new_table->capacity_mask = new_capacity - 1;
 
     for (size_t node_index = 0; node_index < new_capacity; node_index += 1) {
         new_table->stored_nodes[node_index] = NULL;
