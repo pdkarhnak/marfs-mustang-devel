@@ -191,10 +191,13 @@ mustang_task* task_dequeue(task_queue* queue) {
 }
 
 int task_queue_destroy(task_queue* queue) {
+    pthread_mutex_lock(queue->lock);
     if (queue->size > 0) {
+        pthread_mutex_unlock(queue->lock);
         errno = EBUSY;
         return -1;
     }
+    pthread_mutex_unlock(queue->lock);
 
     pthread_mutex_destroy(queue->lock);
     free(queue->lock);

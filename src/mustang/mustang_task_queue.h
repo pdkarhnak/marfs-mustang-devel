@@ -20,7 +20,7 @@ typedef struct mustang_task_struct {
 
 typedef struct mustang_task_queue_struct task_queue;
 
-typedef struct task_queue_struct {
+typedef struct mustang_task_queue_struct {
     size_t size;
     size_t capacity;
     size_t todos;
