@@ -2,7 +2,7 @@
 #include <errno.h>
 #include <string.h>
 
-mustang_task* task_init(marfs_config* task_config, marfs_position* task_position, hashtable* task_ht, pthread_mutex_t* task_ht_lock, void (*traversal_routine)(marfs_config*, marfs_position*, hashtable*, pthread_mutex_t*)) {
+mustang_task* task_init(marfs_config* task_config, marfs_position* task_position, hashtable* task_ht, pthread_mutex_t* task_ht_lock, task_queue* queue_ref, void (*traversal_routine)(marfs_config*, marfs_position*, hashtable*, pthread_mutex_t*, task_queue*)) {
     mustang_task* new_task = (mustang_task*) calloc(1, sizeof(mustang_task));
 
     if (new_task == NULL) {
@@ -13,6 +13,7 @@ mustang_task* task_init(marfs_config* task_config, marfs_position* task_position
     new_task->position = task_position;
     new_task->ht = task_ht;
     new_task->ht_lock = task_ht_lock;
+    new_task->queue_ptr = queue_ref;
     new_task->traversal_func = traversal_routine;
     new_task->prev = NULL;
     new_task->next = NULL;

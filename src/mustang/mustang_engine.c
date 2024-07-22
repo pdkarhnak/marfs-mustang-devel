@@ -19,13 +19,6 @@
 #define DEBUG DEBUG_ALL
 #endif
 
-// In an emergency condition where the parent cannot successfully wait on the 
-// countdown monitor, this parameter sets a bounded wait condition that the 
-// parent will attempt in order to preserve thread-safety.
-#ifndef ATTEMPTS_MAX
-#define ATTEMPTS_MAX 128
-#endif
-
 #define LOG_PREFIX "mustang_engine"
 #include <logging/logging.h>
 
@@ -33,20 +26,7 @@
 #include "mustang_threading.h"
 #include "mustang_monitors.h"
 
-extern void* thread_main(void* args);
 size_t id_cache_capacity;
-static int signal_received; // Declared here in global scope to be accessible to signal handler, but visible only to this file with "static" qualifier
-
-static void engine_handler(int signum) {
-    if (signum == SIGUSR1) {
-        signal_received = 1;
-        return;
-    } else {
-        LOG(LOG_ERR, "Received signal %d! Terminating...\n", signum);
-        _exit(1); // Kill the whole process if a signal received (e.g., SIGINT or SIGTERM) as a best-practice.
-        // Except for application-specific SIGUSR1 usage, all other signals likely to be deadly
-    }
-}
 
 int main(int argc, char** argv) {
 
@@ -57,17 +37,6 @@ int main(int argc, char** argv) {
         printf("\tHINT: see mustang wrapper or invoke \"mustang -h\" for more details.\n");
         return 1;
     } 
-
-    // TODO: set up signal handler here
-    struct sigaction main_sigaction;
-    main_sigaction.sa_handler = engine_handler;
-    sigemptyset(&main_sigaction.sa_mask);
-    main_sigaction.sa_flags = SA_RESTART;
-
-    if (sigaction(SIGUSR1, &main_sigaction, NULL)) {
-        LOG(LOG_ERR, "Failed to initialize signal handler for engine! (%s)\n", strerror(errno));
-        return 1;
-    }
 
     FILE* output_ptr = fopen(argv[4], "w");
 
@@ -89,6 +58,7 @@ int main(int argc, char** argv) {
         close(log_fd);
     }
 
+    // subprocess.run() mandates passing an argument list of strings, so conversion back into numeric values required here
     char* invalid = NULL;
     size_t capacity_power = (size_t) strtol(argv[2], &invalid, 10);
 
@@ -137,25 +107,6 @@ int main(int argc, char** argv) {
         fclose(output_ptr);
         return 1;
     }
-
-    capacity_monitor_t* threads_capacity_monitor = monitor_init(max_threads);
-
-    if (threads_capacity_monitor == NULL) {
-        LOG(LOG_ERR, "Failed to initialize capacity monitor! (%s)\n", strerror(errno));
-        fclose(output_ptr);
-        return 1;
-    }
-
-    countdown_monitor_t* threads_countdown_monitor = countdown_monitor_init();
-
-    if (threads_countdown_monitor == NULL) {
-        LOG(LOG_ERR, "Failed to initialize countdown monitor! (%s)\n", strerror(errno));
-        fclose(output_ptr);
-        return 1;
-    }
-
-    // "Wind up" the countdown monitor initially by one to indicate that the main thread is "alive" (i.e., actively performing critical computation/setup)
-    countdown_monitor_windup(threads_countdown_monitor, 1);
 
     pthread_mutex_t ht_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -248,14 +199,9 @@ int main(int argc, char** argv) {
             }
         }
 
-        child_position->depth = child_depth;
+        child_position->depth = child_depth; 
 
-        thread_args* topdir_args = threadarg_init(threads_capacity_monitor, threads_countdown_monitor, 
-                parent_config, child_position, output_table, &ht_lock, next_basepath, pthread_self());
-
-        pthread_t next_id;
-        countdown_monitor_windup(threads_countdown_monitor, 1);
-        
+        // TODO: rework pthread_create to target elements of static pthread_t array (i.e., thread pool)
         if (pthread_create(&next_id, &child_attr_template, &thread_main, (void*) topdir_args)) {
             LOG(LOG_ERR, "Failed to create top-level thread with target \"%s\"! (%s)\n", argv[index], strerror(errno));
             countdown_monitor_decrement(threads_countdown_monitor, NULL);
@@ -265,21 +211,7 @@ int main(int argc, char** argv) {
 
     }
 
-    pthread_detach(pthread_self());
-
-    size_t threads_alive;
-    if (countdown_monitor_decrement(threads_countdown_monitor, &threads_alive)) {
-        LOG(LOG_ERR, "Failed to decrement countdown monitor from parent!\n");
-    }
-
-    if (threads_alive == 0) {
-        pthread_kill(pthread_self(), SIGUSR1);
-    } else {
-        // If there are other threads alive in the program besides us and they have not signaled us with SIGUSR1 between checking the number of live threads and now), then put the engine to sleep until we are signaled.
-        if (!signal_received) {
-            pause();
-        }
-    }
+    // TODO: put in wait on manager_cv within queue struct and pthread_join() calls
 
     // Child threads *should* be guaranteed to have all exited by this point
 
@@ -292,9 +224,6 @@ int main(int argc, char** argv) {
     // Clean up hashtable and associated lock state
     hashtable_destroy(output_table);
     pthread_mutex_destroy(&ht_lock);
-
-    monitor_destroy(threads_capacity_monitor);
-    countdown_monitor_destroy(threads_countdown_monitor);
 
     if (config_abandonposition(&parent_position)) {
         LOG(LOG_WARNING, "Failed to abandon parent position!\n");

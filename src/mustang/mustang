@@ -5,6 +5,7 @@ import subprocess
 import datetime
 import shutil
 import os
+import sys
 
 startup_timestamp = datetime.datetime.now()
 default_filename = f"mustang-output-{startup_timestamp.year}{startup_timestamp.month}{startup_timestamp.day}-{startup_timestamp.hour}-{startup_timestamp.minute}-{startup_timestamp.second}"
@@ -21,6 +22,8 @@ parser.add_argument("-hc", "--hc", "--hashtable-capacity", required=False, type=
         help='Power of 2 determining output capacity (e.g., default 16 -> 2^16 -> capacity = 65536).')
 parser.add_argument("-cc", "--cc", "--cache-capacity", "--id-cache-capacity", required=False, type=int, default=16, metavar="CAPACITY", 
         help='Maximum number of unique MarFS object IDs that will be \"cached\" at one time in per-thread data structures (default: 16).') 
+
+# TODO: add argument for task queue capacity with Linux SIZE_MAX (queried with sys.maxsize) being the default
 
 logging_group = parser.add_mutually_exclusive_group()
 logging_group.add_argument("-l", "--logfile", "--log-file", required=False, type=str, nargs=1, default=default_logname, metavar="LOGFILE",

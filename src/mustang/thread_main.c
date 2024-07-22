@@ -90,8 +90,6 @@ void interpret_flags(RETCODE_FLAGS flags);
 void* thread_main(void* args) {
     errno = 0; // Since errno not guaranteed to be zero-initialized
 
-    pthread_detach(pthread_self()); 
-
     thread_args* this_args = (thread_args*) args;
 
     id_cache* this_id_cache = id_cache_init(id_cache_capacity);
@@ -120,6 +118,8 @@ void* thread_main(void* args) {
     // Define a convenient alias for this thread's relevant MDAL, from which 
     // all metadata ops will be launched
     MDAL thread_mdal = thread_position->ns->prepo->metascheme.mdal;
+
+    /** BEGIN namespace traversal/subspace discovery routine **/
 
     // Recover a directory handle for the cwd to enable later readdir()
     MDAL_DHANDLE cwd_handle = thread_mdal->opendir(thread_position->ctxt, ".");
@@ -171,6 +171,10 @@ void* thread_main(void* args) {
         }
     }
 
+    /** END namespace traversal/subspace discovery routine **/
+
+    /** BEGIN directory traversal and file/directory discovery routine **/
+
     if (cwd_ok) {
 
         // "Regular" readdir logic
@@ -218,6 +222,7 @@ void* thread_main(void* args) {
 
                 int new_depth = config_traverse(this_args->base_config, child_position, &new_basepath, 0);
 
+
                 if (new_depth < 0) {
                     this_flags |= TRAVERSE_FAILED;
                     LOG(LOG_ERR, "Failed to traverse to target: \"%s\"\n", current_entry->d_name);
@@ -263,15 +268,7 @@ void* thread_main(void* args) {
                 // TODO: replace with task creation and enqueue call
                 RETCODE_FLAGS spawn_flags = mustang_spawn(this_args, &next_id, attr_ptr, child_position, new_basepath);
 
-                if (spawn_flags != RETCODE_SUCCESS) {
-                    this_flags |= spawn_flags;
-                } else {
-                    LOG(LOG_DEBUG, "Forked new thread (ID: %0lx) at basepath %s\n", SHORT_ID(next_id), current_entry->d_name);
-                }
-
             } else if (current_entry->d_type == DT_REG) {
-                LOG(LOG_DEBUG, "Recording file \"%s\" in hashtable.\n", current_entry->d_name);
-
                 file_ftagstr = get_ftag(thread_position, thread_mdal, current_entry->d_name);
                 FTAG retrieved_tag = {0};
                 
@@ -301,20 +298,22 @@ void* thread_main(void* args) {
                         pthread_mutex_lock(this_args->hashtable_lock);
                         put(this_args->hashtable, retrieved_id); // put() dupes string into new heap space
                         pthread_mutex_unlock(this_args->hashtable_lock);
+                        LOG(LOG_DEBUG, "Recorded object \"%s\" in hashtable.\n", retrieved_id);
                     }
 
                     free(retrieved_id);
-                    retrieved_id = NULL; // make ptr NULL to better discard stale reference
+                    retrieved_id = NULL; // make ptr NULL to better discard stale reference and prevent double-free
                 }
 
                 ftag_cleanup(&retrieved_tag); // free internal allocated memory for FTAG's ctag and streamid fields
                 free(file_ftagstr);
                 file_ftagstr = NULL; // discard stale reference to FTAG to prevent double-free
-
             }
 
             current_entry = thread_mdal->readdir(cwd_handle);
         }
+
+        /** END directory traversal and file/directory discovery routine **/
 
         /* --- begin join and cleanup --- */
 
@@ -340,8 +339,6 @@ void* thread_main(void* args) {
 
     id_cache_destroy(this_id_cache);
     threadarg_destroy(this_args);
-
-    pthread_exit(NULL);
 
 }
 

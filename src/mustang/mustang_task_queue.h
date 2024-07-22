@@ -8,17 +8,18 @@
 
 typedef struct mustang_task_struct mustang_task;
 
+typedef struct mustang_task_queue_struct task_queue;
+
 typedef struct mustang_task_struct {
     marfs_config* config;
     marfs_position* position;
     hashtable* ht;
     pthread_mutex_t* ht_lock;
-    void (*traversal_func)(marfs_config*, marfs_position*, hashtable*, pthread_mutex_t*);
+    task_queue* queue_ptr;
+    void (*traversal_func)(marfs_config*, marfs_position*, task_queue*, hashtable*, pthread_mutex_t*, task_queue*);
     mustang_task* prev;
     mustang_task* next;
 } mustang_task;
-
-typedef struct mustang_task_queue_struct task_queue;
 
 typedef struct mustang_task_queue_struct {
     size_t size;
