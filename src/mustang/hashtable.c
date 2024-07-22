@@ -60,15 +60,6 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include "mustang_logging.h"
 #include <errno.h>
 
-#ifdef DEBUG_MUSTANG
-#define DEBUG DEBUG_MUSTANG
-#elif (defined DEBUG_ALL)
-#define DEBUG DEBUG_ALL
-#endif
-
-#define LOG_PREFIX "hashtable"
-#include <logging/logging.h>
-
 /** 
  * Internal hashing function: MurmurHash3_x64_128 by Austin Appleby. See
  * release notes and full implementation, including helper utilities and
@@ -140,16 +131,14 @@ void put(hashtable* table, char* new_object_name) {
     }
 }
 
-void hashtable_dump(hashtable* table, FILE* output) {
+int hashtable_dump(hashtable* table, FILE* output) {
     for (size_t index = 0; index < table->capacity; index += 1) {
         if ((table->stored_nodes)[index] != NULL) {
             fprintf(output, "Index %zu:\t%s\n", index, (table->stored_nodes)[index]);
         }
     }
 
-    if (fclose(output)) {
-        LOG(LOG_WARNING, "Failed to close output file! (%s)\n", strerror(errno));
-    }
+    return fclose(output);
 }
 
 /* ----- END HASHTABLE IMPLEMENTATION ----- */

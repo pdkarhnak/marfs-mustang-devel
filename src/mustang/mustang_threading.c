@@ -63,6 +63,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <dirent.h>
 #include <errno.h>
 #include <tagging/tagging.h>
+#include <datastream/datastream.h>
 #include "mustang_threading.h"
 #include "task_queue.h"
 #include "id_cache.h"
@@ -117,7 +118,6 @@ char* get_ftag(marfs_position* current_position, MDAL current_mdal, char* path) 
 }
 
 void traverse_dir(marfs_config* base_config, marfs_position* task_position, hashtable* output_table, pthread_mutex_t* table_lock, task_queue* pool_queue) {
-
     id_cache* this_id_cache = id_cache_init(id_cache_capacity);
 
     if (this_id_cache == NULL) {
@@ -169,77 +169,79 @@ void traverse_dir(marfs_config* base_config, marfs_position* task_position, hash
                 continue;
             }
 
-            marfs_position* child_position = (marfs_position*) calloc(1, sizeof(marfs_position));
-            if (child_position == NULL) {
-                LOG(LOG_ERR, "Failed to allocate memory for new child position (current entry: %s)\n", current_entry->d_name);
+            marfs_position* new_dir_position = (marfs_position*) calloc(1, sizeof(marfs_position));
+            if (new_dir_position == NULL) {
+                LOG(LOG_ERR, "Failed to allocate memory for new new_task position (current entry: %s)\n", current_entry->d_name);
                 current_entry = thread_mdal->readdir(cwd_handle);
                 continue;
             }
 
-            if (config_duplicateposition(task_position, child_position)) {
-                LOG(LOG_ERR, "Failed to duplicate parent position to child (current entry: %s)\n", current_entry->d_name);
-                config_abandonposition(child_position);
-                free(child_position);
+            if (config_duplicateposition(task_position, new_dir_position)) {
+                LOG(LOG_ERR, "Failed to duplicate parent position to new_task (current entry: %s)\n", current_entry->d_name);
+                config_abandonposition(new_dir_position);
+                free(new_dir_position);
                 current_entry = thread_mdal->readdir(cwd_handle);
                 continue;
             }
 
             char* new_basepath = strdup(current_entry->d_name);
-            int new_depth = config_traverse(base_config, child_position, &new_basepath, 0);
+            int new_depth = config_traverse(base_config, new_dir_position, &new_basepath, 0);
 
             if (new_depth < 0) {
                 LOG(LOG_ERR, "Failed to traverse to target: \"%s\"\n", current_entry->d_name);
 
                 free(new_basepath);
-                config_abandonposition(child_position);
-                free(child_position);
+                config_abandonposition(new_dir_position);
+                free(new_dir_position);
                 
                 current_entry = thread_mdal->readdir(cwd_handle);
                 continue;
             }
             
-            MDAL_DHANDLE next_cwd_handle = thread_mdal->opendir(child_position->ctxt, current_entry->d_name);
+            MDAL_DHANDLE next_cwd_handle = thread_mdal->opendir(new_dir_position->ctxt, current_entry->d_name);
 
             if (next_cwd_handle == NULL) {
-                LOG(LOG_ERR, "Failed to open directory handle for child (%s) (directory: \"%s\")\n", strerror(errno), current_entry->d_name);
+                LOG(LOG_ERR, "Failed to open directory handle for new_task (%s) (directory: \"%s\")\n", strerror(errno), current_entry->d_name);
 
                 free(new_basepath);
-                config_abandonposition(child_position);
-                free(child_position);
+                config_abandonposition(new_dir_position);
+                free(new_dir_position);
 
                 current_entry = thread_mdal->readdir(cwd_handle);
                 continue;
             }
 
-            if (thread_mdal->chdir(child_position->ctxt, next_cwd_handle)) {
+            if (thread_mdal->chdir(new_dir_position->ctxt, next_cwd_handle)) {
                 LOG(LOG_ERR, "Failed to chdir to target directory \"%s\" (%s).\n", current_entry->d_name, strerror(errno));
 
                 free(new_basepath);
-                config_abandonposition(child_position);
-                free(child_position);
+                config_abandonposition(new_dir_position);
+                free(new_dir_position);
                 thread_mdal->closedir(next_cwd_handle);
 
                 current_entry = thread_mdal->readdir(cwd_handle);
                 continue;
             }
 
-            child_position->depth = new_depth;
+            new_dir_position->depth = new_depth;
 
             // depth == -1 case (config_traverse() error) has already been handled, so presuming that 0 and > 0 are exhaustive is safe.
             switch (new_depth) {
                 case 0:
-                    mustang_task* new_ns_task = task_init(base_config, child_position, output_table, table_lock, pool_queue, &traverse_ns);
+                    mustang_task* new_ns_task = task_init(base_config, new_dir_position, output_table, table_lock, pool_queue, &traverse_ns);
                     task_enqueue(pool_queue, new_ns_task);
                     LOG(LOG_DEBUG, "Created new task to traverse namespace \"%s\"\n", new_basepath);
                     break;
                 default:
-                    mustang_task* new_dir_task = task_init(base_config, child_position, output_table, table_lock, pool_queue, &traverse_dir);
+                    mustang_task* new_dir_task = task_init(base_config, new_dir_position, output_table, table_lock, pool_queue, &traverse_dir);
                     task_enqueue(pool_queue, new_dir_task);
                     LOG(LOG_DEBUG, "Created new task to traverse directory \"%s\"\n", new_basepath);
                     break;
             }
 
-            free(new_basepath);
+            // Basepath no longer needed after logging since new_task reopens 
+            // dirhandle not with basepath, but with post-chdir "." reference.
+            free(new_basepath); 
 
         } else if (current_entry->d_type == DT_REG) {
             file_ftagstr = get_ftag(task_position, thread_mdal, current_entry->d_name);
@@ -268,9 +270,9 @@ void traverse_dir(marfs_config* base_config, marfs_position* task_position, hash
                 // and not attempting to add them to the hashtable again.                    
                 if (id_cache_probe(this_id_cache, retrieved_id) == 0) {
                     id_cache_add(this_id_cache, retrieved_id);
-                    pthread_mutex_lock(this_args->hashtable_lock);
-                    put(this_args->hashtable, retrieved_id); // put() dupes string into new heap space
-                    pthread_mutex_unlock(this_args->hashtable_lock);
+                    pthread_mutex_lock(table_lock);
+                    put(output_table, retrieved_id); // put() dupes string into new heap space
+                    pthread_mutex_unlock(table_lock);
                     LOG(LOG_DEBUG, "Recorded object \"%s\" in hashtable.\n", retrieved_id);
                 }
 
@@ -313,56 +315,54 @@ void traverse_dir(marfs_config* base_config, marfs_position* task_position, hash
 }
 
 void traverse_ns(marfs_config* base_config, marfs_position* task_position, hashtable* output_table, pthread_mutex_t* table_lock, task_queue* pool_queue) {
-    errno = 0; // Since errno not guaranteed to be zero-initialized
-
     // Attempt to fortify the thread's position (if not already fortified) and check for errors
     if ((task_position->ctxt == NULL) && config_fortifyposition(task_position)) {
         LOG(LOG_ERR, "Failed to fortify MarFS position!\n");
         return;
     }
 
-    // Define a convenient alias for this thread's relevant MDAL, from which 
-    // all metadata ops will be launched
-    MDAL thread_mdal = task_position->ns->prepo->metascheme.mdal;
-
-    /** BEGIN namespace traversal/subspace discovery routine **/
-
+    // Namespaces may contain other namespaces. Examine first the subspace list
+    // for the current NS to see if tasks to traverse subspaces need to be 
+    // enqueued.
     if (task_position->ns->subnodes) {
 
         for (size_t subnode_index = 0; subnode_index < task_position->ns->subnodecount; subnode_index += 1) {
             HASH_NODE current_subnode = (task_position->ns->subnodes)[subnode_index];
 
-            marfs_position* child_ns_position = (marfs_position*) calloc(1, sizeof(marfs_position));
+            marfs_position* new_ns_position = (marfs_position*) calloc(1, sizeof(marfs_position));
 
-            if (config_duplicateposition(task_position, child_ns_position)) {
-                LOG(LOG_ERR, "Failed to duplicate position for new child thread\n");
-                free(child_ns_position);
+            if (config_duplicateposition(task_position, new_ns_position)) {
+                LOG(LOG_ERR, "Failed to duplicate position for new new_task thread\n");
+                free(new_ns_position);
                 continue;
             }
             
-            char* child_ns_path = strdup(current_subnode.name);
-            if (config_traverse(base_config, child_ns_position, &child_ns_path, 0)) {
-                LOG(LOG_ERR, "Failed to traverse to new child position: %s\n", current_subnode.name);
-                free(child_ns_path);
-                config_abandonposition(child_ns_position);
-                free(child_ns_position);
+            char* new_ns_path = strdup(current_subnode.name);
+            if (config_traverse(base_config, new_ns_position, &new_ns_path, 0)) {
+                LOG(LOG_ERR, "Failed to traverse to new new_task position: %s\n", current_subnode.name);
+                free(new_ns_path);
+                config_abandonposition(new_ns_position);
+                free(new_ns_position);
                 continue;
             }
 
-            pthread_t next_ns_thread;
-
             // subspaces of this namespace are namespaces "prima facie" --- automatically create traverse_ns task
-            mustang_task* new_ns_task = task_init(base_config, child_position, output_table, table_lock, pool_queue, &traverse_ns);
+            mustang_task* new_ns_task = task_init(base_config, new_ns_position, output_table, table_lock, pool_queue, &traverse_ns);
             task_enqueue(pool_queue, new_ns_task);
+            LOG(LOG_DEBUG, "Created new namespace traversal task at basepath: \"%s\"\n", new_ns_path);
+            free(new_ns_path);
         }
     }
 
-    /** END namespace traversal/subspace discovery routine **/
+    // Namespaces may also contain subdirectories and files. Proceed to the 
+    // directory traversal routine (the "regular" common case) and examine any
+    // other namespace contents.
     traverse_dir(base_config, task_position, output_table, table_lock, pool_queue);
 }
 
 void* thread_launcher(void* args) {
     task_queue* queue = (task_queue*) args;
+    errno = 0; // Since errno not guaranteed to be zero-initialized
 
     while (1) {
         // Wraps a wait on a task being available in the queue (a cv wait), so
@@ -376,16 +376,31 @@ void* thread_launcher(void* args) {
             return NULL;
         }
 
+        // In all other circumstances, tasks will be initialized with a
+        // function pointer indicating what work (traversing a namespace or
+        // traversing a directory) needs to be performed, so jump to that.
         next_task->task_func(next_task->config, next_task->position, next_task->ht, next_task->ht_lock, queue);
 
         pthread_mutex_lock(queue->lock); 
+        
+        // Decrement the number of tasks to do *after* the task execution has
+        // returned (even when failing) so that the parent is not signaled to
+        // clean up state while threads may be using it in tasks.
         queue->todos -= 1;
         LOG(LOG_DEBUG, "Queue todos left: %zu\n", queue->todos);
+
         if (queue->todos == 0) {
+            // If no other tasks to do, signal the parent to wake up and clean 
+            // up shared state.
             pthread_cond_signal(queue->manager_cv);
         }
+
         pthread_mutex_unlock(queue->lock);
 
+        // Task functions already abandon the position and free the associated
+        // memory. Other state (config, hashtable + lock, etc.) is held by the
+        // parent and will be cleaned up there. So, just free the task struct 
+        // itself.
         free(next_task);
     }
 

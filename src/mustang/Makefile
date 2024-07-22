@@ -20,24 +20,21 @@ MARFS_LDFLAGS := -L$(MARFS_PREFIX)/lib
 # all the significant computational work via the thread routines
 all: mustang_engine
 
-mustang_engine: mustang_engine.c thread_main.o libmustang.a
-	$(CC) $(CFLAGS) $(MARFS_CFLAGS) $(MARFS_INCLUDE) $< thread_main.o -o $@ \
-		$(LDFLAGS) -lpthread -L. -lmustang $(MARFS_LDFLAGS) \
+mustang_engine: mustang_engine.c libmustang.a
+	$(CC) $(CFLAGS) $(MARFS_CFLAGS) $(MARFS_INCLUDE) $< -o $@ $(LDFLAGS) \
+		-lpthread -L. -lmustang $(MARFS_LDFLAGS) \
 		-Wl,-rpath,$(MARFS_PREFIX)/lib -lmarfs -llogging
 
 # A static library bundling all the data structures and threading code that the
 # mustang engine relies on. mustang *must* still be invoked via the
 # mustang_engine executable and/or via its "mustang" frontend---use in other
 # applications by simply linking against the static library is insufficient
-libmustang.a: mustang_monitors.o mustang_threading.o hashtable.o id_cache.o
+libmustang.a: mustang_threading.o hashtable.o id_cache.o task_queue.o
 	ar rcs $@ $^
 
 # thread_main and retcode_ll (specifically retcode_ll_flush) need to link 
 # against the logging library. So, create special rules for those object files.
-thread_main.o: thread_main.c mustang_logging.h
-	$(CC) $(CFLAGS) $(MARFS_INCLUDE) -c $< -llogging
-
-hashtable.o: hashtable.c hashtable.h
+mustang_threading.o: mustang_threading.c mustang_threading.h mustang_logging.h
 	$(CC) $(CFLAGS) $(MARFS_INCLUDE) -c $< -llogging
 
 %.o: %.c %.h

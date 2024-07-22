@@ -65,12 +65,13 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <config/config.h>
 #include <mdal/mdal.h>
 #include "hashtable.h"
+#include "task_queue.h"
 
-extern const size_t id_cache_capacity;
+extern size_t id_cache_capacity;
 
 char* get_ftag(marfs_position* current_position, MDAL current_mdal, char* path);
 
-void traverse_dir(marfs_config* base_config, marfs_position* task_position, hashtable* output_table, pthread_mutex_t* table_lock, task_queue* pool_queue*);
+void traverse_dir(marfs_config* base_config, marfs_position* task_position, hashtable* output_table, pthread_mutex_t* table_lock, task_queue* pool_queue);
 
 void traverse_ns(marfs_config* base_config, marfs_position* task_position, hashtable* output_table, pthread_mutex_t* table_lock, task_queue* pool_queue);
 

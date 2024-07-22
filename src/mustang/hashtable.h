@@ -118,6 +118,6 @@ void put(hashtable* table, char* new_object_name);
  * Do not otherwise call this function without appropriately synchronizing on 
  * the hashtable.
  */
-void hashtable_dump(hashtable* table, FILE* output);
+int hashtable_dump(hashtable* table, FILE* output);
 
 #endif

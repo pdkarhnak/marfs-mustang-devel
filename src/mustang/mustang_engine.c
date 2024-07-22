@@ -6,7 +6,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <pthread.h>
-#include <signal.h>
+#include <limits.h>
 #include <marfs.h>
 #include <config/config.h>
 #include <datastream/datastream.h>
@@ -25,6 +25,8 @@
 #include "hashtable.h"
 #include "mustang_threading.h"
 #include "task_queue.h"
+
+#define HC_MAX ((size_t) 1 << 63)
 
 extern void* thread_launcher(void* args);
 
@@ -69,9 +71,27 @@ int main(int argc, char** argv) {
     }
 
     invalid = NULL;
-    long hashtable_capacity = strtol(argv[2], &invalid, 10);
+    long queue_capacity = (size_t) strtol(argv[2], &invalid, 10);
 
-    if ((hashtable_capacity < 2) || (hashtable_capacity > (1 << 63)) || 
+    if ((queue_capacity < 0) || (errno == EINVAL) || (*invalid != '\0')) {
+        LOG(LOG_ERR, "Bad task queue capacity argument \"%s\" received. Please specify a nonnegative integer (i.e., > 0), then try again.\n", argv[4]);
+        fclose(output_ptr);
+        return 1;
+    }
+
+    LOG(LOG_INFO, "Received queue capacity: %zu\n", (size_t) queue_capacity);
+
+    if (queue_capacity < max_threads) {
+        LOG(LOG_WARNING, "Task queue capacity is less than maximum number of threads (i.e., thread pool size), which will limit concurrency by not taking full advantage of the thread pool.\n");
+        LOG(LOG_WARNING, "Consider passing a task queue capacity argument that is greater than or equal to the maximum number of threads so that all threads have the chance to dequeue at least one task.\n");
+    }
+
+    return 0;
+
+    invalid = NULL;
+    long hashtable_capacity = strtol(argv[3], &invalid, 10);
+
+    if ((hashtable_capacity < 2) || (((size_t) hashtable_capacity) > (HC_MAX)) || 
             (errno == EINVAL) || (*invalid != '\0')) {
         LOG(LOG_ERR, "Bad hashtable capacity argument \"%s\" received. Please specify a positive integer between (2**1) and (2**63), then try again.\n", argv[2]);
         fclose(output_ptr);
@@ -79,7 +99,7 @@ int main(int argc, char** argv) {
     }
 
     invalid = NULL;
-    long fetched_id_cache_capacity = strtol(argv[3], &invalid, 10);
+    long fetched_id_cache_capacity = strtol(argv[4], &invalid, 10);
 
     if ((fetched_id_cache_capacity <= 0) || (errno == EINVAL) || (*invalid != '\0')) {
         LOG(LOG_ERR, "Bad cache capacity argument \"%s\" received. Please specify a nonnegative integer (i.e. > 0), then try again.\n", argv[3]);
@@ -93,19 +113,6 @@ int main(int argc, char** argv) {
         LOG(LOG_WARNING, "Provided cache capacity argument will result in large per-thread data structures, which may overwhelm the heap.\n");
     }
 
-    invalid = NULL;
-    long queue_capacity = (size_t) strtol(argv[4], &invalid, 10);
-
-    if ((queue_capacity <= 0) || (errno == EINVAL) || (*invalid != '\0')) {
-        LOG(LOG_ERR, "Bad task queue capacity argument \"%s\" received. Please specify a nonnegative integer (i.e., > 0), then try again.\n", argv[4]);
-        fclose(output_ptr);
-        return 1;
-    }
-
-    if (queue_capacity < max_threads) {
-        LOG(LOG_WARNING, "Task queue capacity is less than maximum number of threads (i.e., thread pool size), which will limit concurrency by not taking full advantage of the thread pool.\n");
-        LOG(LOG_WARNING, "Consider passing a task queue capacity argument that is greater than or equal to the maximum number of threads so that all threads have the chance to dequeue at least one task.\n");
-    }
 
     hashtable* output_table = hashtable_init((size_t) hashtable_capacity);
     
@@ -147,17 +154,17 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    pthread_attr_t child_attr_template;
-    pthread_attr_t* attr_ptr = &child_attr_template;
+    pthread_attr_t pooled_attr_template;
+    pthread_attr_t* attr_ptr = &pooled_attr_template;
     
     if (pthread_attr_init(attr_ptr)) {
-        LOG(LOG_ERR, "Failed to initialize attributes for child threads!\n");
+        LOG(LOG_ERR, "Failed to initialize attributes for pooled threads!\n");
         LOG(LOG_WARNING, "This means that stack size cannot be reduced from the default, which may overwhelm system resources unexpectedly.\n");
         attr_ptr = NULL;
     }
 
-    if (pthread_attr_setstacksize(&child_attr_template, 2 * PTHREAD_STACK_MIN)) {
-        LOG(LOG_ERR, "Failed to set stack size for child threads! (%s)\n", strerror(errno));
+    if (pthread_attr_setstacksize(&pooled_attr_template, 2 * PTHREAD_STACK_MIN)) {
+        LOG(LOG_ERR, "Failed to set stack size for pooled threads! (%s)\n", strerror(errno));
         LOG(LOG_WARNING, "This means that threads will proceed with the default stack size, which is unnecessarily large for this application and which may overwhelm system resources unexpectedly.\n");
         attr_ptr = NULL;
     }
@@ -196,53 +203,53 @@ int main(int argc, char** argv) {
             continue;
         }
 
-        marfs_position* child_position = calloc(1, sizeof(marfs_position));
+        marfs_position* new_task_position = calloc(1, sizeof(marfs_position));
 
-        if (config_duplicateposition(&parent_position, child_position)) {
-            LOG(LOG_ERR, "Failed to duplicate parent position to child!\n");
+        if (config_duplicateposition(&parent_position, new_task_position)) {
+            LOG(LOG_ERR, "Failed to duplicate parent position to new task!\n");
         }
 
         char* next_basepath = strdup(argv[index]);
 
-        int child_depth = config_traverse(parent_config, child_position, &next_basepath, 0);
+        int new_task_depth = config_traverse(parent_config, new_task_position, &next_basepath, 0);
 
-        if (child_depth < 0) {
-            LOG(LOG_ERR, "Failed to traverse (got depth: %d)\n", child_depth);
+        if (new_task_depth < 0) {
+            LOG(LOG_ERR, "Failed to traverse (got depth: %d)\n", new_task_depth);
             free(next_basepath);
-            config_abandonposition(child_position);
+            config_abandonposition(new_task_position);
             continue;
         }
 
-        if (config_fortifyposition(child_position)) {
-            LOG(LOG_ERR, "Failed to fortify child position after child traverse!\n");
+        if (config_fortifyposition(new_task_position)) {
+            LOG(LOG_ERR, "Failed to fortify new_task position after new_task traverse!\n");
         }
 
-        MDAL_DHANDLE child_dirhandle;
+        MDAL_DHANDLE task_dirhandle;
 
-        MDAL current_child_mdal = child_position->ns->prepo->metascheme.mdal;
+        MDAL task_mdal = new_task_position->ns->prepo->metascheme.mdal;
 
-        if (child_depth != 0) {
-            child_dirhandle = current_child_mdal->opendir(child_position->ctxt, next_basepath);
+        if (new_task_depth != 0) {
+            task_dirhandle = task_mdal->opendir(new_task_position->ctxt, next_basepath);
 
-            if (child_dirhandle == NULL) {
+            if (task_dirhandle == NULL) {
                 LOG(LOG_ERR, "Failed to open target directory \"%s\" (%s)\n", next_basepath, strerror(errno));
             }
 
-            if (current_child_mdal->chdir(child_position->ctxt, child_dirhandle)) {
+            if (task_mdal->chdir(new_task_position->ctxt, task_dirhandle)) {
                 LOG(LOG_ERR, "Failed to chdir into target directory \"%s\" (%s)\n", next_basepath, strerror(errno));
             }
         }
 
-        child_position->depth = child_depth; 
+        new_task_position->depth = new_task_depth; 
 
-        switch (child_depth) {
+        switch (new_task_depth) {
             case 0:
-                mustang_task* top_ns_task = task_init(parent_config, child_position, output_table, &ht_lock, queue, &traverse_ns);
+                mustang_task* top_ns_task = task_init(parent_config, new_task_position, output_table, &ht_lock, queue, &traverse_ns);
                 task_enqueue(queue, top_ns_task);
                 LOG(LOG_DEBUG, "Created top-level namespace traversal task at basepath: \"%s\"", next_basepath);
                 break;
             default:
-                mustang_task* top_dir_task = task_init(parent_config, child_position, output_table, &ht_lock, queue, &traverse_dir);
+                mustang_task* top_dir_task = task_init(parent_config, new_task_position, output_table, &ht_lock, queue, &traverse_dir);
                 task_enqueue(queue, top_dir_task);
                 LOG(LOG_DEBUG, "Created top-level directory traversal task at basepath: \"%s\"", next_basepath);
                 break;
@@ -253,7 +260,7 @@ int main(int argc, char** argv) {
 
     pthread_mutex_lock(queue->lock);
     while ((queue->todos > 0) && (queue->size > 0)) {
-        pthread_cond_wait(queue->manager_cv);
+        pthread_cond_wait(queue->manager_cv, queue->lock);
     }
     pthread_mutex_unlock(queue->lock); 
 
@@ -278,9 +285,13 @@ int main(int argc, char** argv) {
     free(worker_pool);
 
     pthread_mutex_lock(&ht_lock);
-    hashtable_dump(output_table, output_ptr);
+    // hashtable_dump() returns the result of fclose(), which can set errno
+    if (hashtable_dump(output_table, output_ptr)) {
+        LOG(LOG_WARNING, "Failed to close hashtable output file pointer! (%s)\n", strerror(errno));
+    }
     pthread_mutex_unlock(&ht_lock);
 
+    // If attr could be initialized (and was therefore kept non-NULL), then destroy the attributes
     if (attr_ptr != NULL) {
         pthread_attr_destroy(attr_ptr);
     }

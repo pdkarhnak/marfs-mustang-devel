@@ -16,7 +16,7 @@ typedef struct mustang_task_struct {
     hashtable* ht;
     pthread_mutex_t* ht_lock;
     task_queue* queue_ptr;
-    void (*task_func)(marfs_config*, marfs_position*, task_queue*, hashtable*, pthread_mutex_t*, task_queue*);
+    void (*task_func)(marfs_config*, marfs_position*, hashtable*, pthread_mutex_t*, task_queue*);
     mustang_task* prev;
     mustang_task* next;
 } mustang_task;
