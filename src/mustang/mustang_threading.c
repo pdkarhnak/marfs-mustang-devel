@@ -228,11 +228,13 @@ void traverse_dir(marfs_config* base_config, marfs_position* task_position, hash
             // depth == -1 case (config_traverse() error) has already been handled, so presuming that 0 and > 0 are exhaustive is safe.
             switch (new_depth) {
                 case 0:
-                    // TODO: init and enqueue new task targeting traverse_ns() routine
+                    mustang_task* new_ns_task = task_init(base_config, child_position, output_table, table_lock, pool_queue, &traverse_ns);
+                    task_enqueue(pool_queue, new_ns_task);
                     LOG(LOG_DEBUG, "Created new task to traverse namespace \"%s\"\n", new_basepath);
                     break;
                 default:
-                    // TODO: init and enqueue new task targeting traverse_dir() routine
+                    mustang_task* new_dir_task = task_init(base_config, child_position, output_table, table_lock, pool_queue, &traverse_dir);
+                    task_enqueue(pool_queue, new_dir_task);
                     LOG(LOG_DEBUG, "Created new task to traverse directory \"%s\"\n", new_basepath);
                     break;
             }
@@ -325,14 +327,6 @@ void traverse_ns(marfs_config* base_config, marfs_position* task_position, hasht
 
     /** BEGIN namespace traversal/subspace discovery routine **/
 
-    // TODO: eliminate depth check in "child" (i.e., within executed task),
-    // instead moving overhead to "parent" (i.e., executed task which creates
-    // this task) to either create a task with a pointer to traverse_ns() on 
-    // encountered depth 0 or to create a task with a pointer to traverse_dir()
-    // for any other valid depth
-
-    // check reference chase for position struct's corresponding namespace (and list of subspaces within namespace)
-    /* task_position->ns->subnodes */
     if (task_position->ns->subnodes) {
 
         for (size_t subnode_index = 0; subnode_index < task_position->ns->subnodecount; subnode_index += 1) {
@@ -356,13 +350,10 @@ void traverse_ns(marfs_config* base_config, marfs_position* task_position, hasht
             }
 
             pthread_t next_ns_thread;
-            // TODO: replace with task creation and enqueue call in new thread pool-based implementation
-            RETCODE_FLAGS ns_spawn_flags = mustang_spawn(this_args, &next_ns_thread, attr_ptr, child_ns_position, child_ns_path);
 
-            if (ns_spawn_flags != RETCODE_SUCCESS) {
-                this_flags |= ns_spawn_flags;
-            }
-
+            // subspaces of this namespace are namespaces "prima facie" --- automatically create traverse_ns task
+            mustang_task* new_ns_task = task_init(base_config, child_position, output_table, table_lock, pool_queue, &traverse_ns);
+            task_enqueue(pool_queue, new_ns_task);
         }
     }
 

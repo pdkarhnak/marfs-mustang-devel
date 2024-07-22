@@ -34,13 +34,13 @@ int main(int argc, char** argv) {
 
     errno = 0; // to guarantee an initially successful context and avoid "false positive" errno settings (errno not guaranteed to be initialized)
 
-    if (argc < 6) {
+    if (argc < 7) {
         printf("USAGE: ./mustang-engine [max threads] [hashtable capacity exponent] [cache capacity] [output file] [log file] [paths, ...]\n");
         printf("\tHINT: see mustang wrapper or invoke \"mustang -h\" for more details.\n");
         return 1;
     } 
 
-    FILE* output_ptr = fopen(argv[4], "w");
+    FILE* output_ptr = fopen(argv[5], "w");
 
     if (output_ptr == NULL) {
         LOG(LOG_ERR, "Failed to open file \"%s\" for writing to output (%s)\n", argv[4], strerror(errno));
@@ -48,8 +48,8 @@ int main(int argc, char** argv) {
     }
 
     // If stderr not being used for logging, redirect stdout and stderr to specified file (redirection is default behavior)
-    if (strncmp(argv[5], "stderr", strlen("stderr")) != 0) {
-        int log_fd = open(argv[5], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (strncmp(argv[6], "stderr", strlen("stderr")) != 0) {
+        int log_fd = open(argv[6], O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
         if (dup2(log_fd, STDERR_FILENO) == -1) {
             printf("Failed to redirect stderr! (%s)\n", strerror(errno));
@@ -60,7 +60,16 @@ int main(int argc, char** argv) {
 
     // subprocess.run() in frontend mandates passing an argument list of strings, so conversion back into numeric values required here
     char* invalid = NULL;
-    size_t hashtable_capacity = (size_t) strtol(argv[2], &invalid, 10);
+    long max_threads = strtol(argv[1], &invalid, 10);
+
+    if ((max_threads <= 0) || (errno == EINVAL) || (*invalid != '\0')) {
+        LOG(LOG_ERR, "Bad max threads argument \"%s\" received. Please specify a nonnegative integer (i.e. > 0), then try again.\n", argv[3]);
+        fclose(output_ptr);
+        return 1;
+    }
+
+    invalid = NULL;
+    long hashtable_capacity = strtol(argv[2], &invalid, 10);
 
     if ((hashtable_capacity < 2) || (hashtable_capacity > (1 << 63)) || 
             (errno == EINVAL) || (*invalid != '\0')) {
@@ -70,28 +79,35 @@ int main(int argc, char** argv) {
     }
 
     invalid = NULL;
-    id_cache_capacity = (size_t) strtol(argv[3], &invalid, 10);
+    long fetched_id_cache_capacity = strtol(argv[3], &invalid, 10);
 
-    if ((id_cache_capacity <= 0) || (errno == EINVAL) || (*invalid != '\0')) {
+    if ((fetched_id_cache_capacity <= 0) || (errno == EINVAL) || (*invalid != '\0')) {
         LOG(LOG_ERR, "Bad cache capacity argument \"%s\" received. Please specify a nonnegative integer (i.e. > 0), then try again.\n", argv[3]);
         fclose(output_ptr);
         return 1;
     }
+
+    id_cache_capacity = (size_t) fetched_id_cache_capacity; // cast afterwards to allow detecting negative values
 
     if (id_cache_capacity > 1024) {
         LOG(LOG_WARNING, "Provided cache capacity argument will result in large per-thread data structures, which may overwhelm the heap.\n");
     }
 
     invalid = NULL;
-    size_t max_threads = (size_t) strtol(argv[1], &invalid, 10);
+    long queue_capacity = (size_t) strtol(argv[4], &invalid, 10);
 
-    if ((max_threads <= 0) || (errno == EINVAL) || (*invalid != '\0')) {
-        LOG(LOG_ERR, "Bad max threads argument \"%s\" received. Please specify a nonnegative integer (i.e. > 0), then try again.\n", argv[3]);
+    if ((queue_capacity <= 0) || (errno == EINVAL) || (*invalid != '\0')) {
+        LOG(LOG_ERR, "Bad task queue capacity argument \"%s\" received. Please specify a nonnegative integer (i.e., > 0), then try again.\n", argv[4]);
         fclose(output_ptr);
         return 1;
     }
 
-    hashtable* output_table = hashtable_init(hashtable_capacity);
+    if (queue_capacity < max_threads) {
+        LOG(LOG_WARNING, "Task queue capacity is less than maximum number of threads (i.e., thread pool size), which will limit concurrency by not taking full advantage of the thread pool.\n");
+        LOG(LOG_WARNING, "Consider passing a task queue capacity argument that is greater than or equal to the maximum number of threads so that all threads have the chance to dequeue at least one task.\n");
+    }
+
+    hashtable* output_table = hashtable_init((size_t) hashtable_capacity);
     
     if ((output_table == NULL) || (errno == ENOMEM)) {
         LOG(LOG_ERR, "Failed to initialize hashtable (%s)\n", strerror(errno));
@@ -108,7 +124,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    task_queue* queue = task_queue_init(/* TODO: add reference to queue capacity argument */);
+    task_queue* queue = task_queue_init((size_t) queue_capacity);
 
     if (queue == NULL) {
         LOG(LOG_ERR, "Failed to initialize task queue! (%s)\n", strerror(errno));
@@ -154,7 +170,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    for (size_t i = 0; i < max_threads; i += 1) {
+    for (long i = 0; i < max_threads; i += 1) {
         int create_errorcode = pthread_create(&(worker_pool[i]), attr_ptr, &thread_launcher, queue);
         if (create_errorcode) {
             LOG(LOG_ERR, "Failed to create thread! (%s)\n", strerror(create_errorcode));
@@ -163,7 +179,7 @@ int main(int argc, char** argv) {
     }
 
     // This should be the code that creates *tasks*, not *threads*
-    for (int index = 6; index < argc; index += 1) {
+    for (int index = 7; index < argc; index += 1) {
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
 
         struct stat arg_statbuf;
@@ -218,8 +234,21 @@ int main(int argc, char** argv) {
         }
 
         child_position->depth = child_depth; 
-        // TODO: put in switch-case statement to create task according to namespace traversal or directory traversal
 
+        switch (child_depth) {
+            case 0:
+                mustang_task* top_ns_task = task_init(parent_config, child_position, output_table, &ht_lock, queue, &traverse_ns);
+                task_enqueue(queue, top_ns_task);
+                LOG(LOG_DEBUG, "Created top-level namespace traversal task at basepath: \"%s\"", next_basepath);
+                break;
+            default:
+                mustang_task* top_dir_task = task_init(parent_config, child_position, output_table, &ht_lock, queue, &traverse_dir);
+                task_enqueue(queue, top_dir_task);
+                LOG(LOG_DEBUG, "Created top-level directory traversal task at basepath: \"%s\"", next_basepath);
+                break;
+        }
+
+        free(next_basepath);
     }
 
     pthread_mutex_lock(queue->lock);
@@ -229,13 +258,13 @@ int main(int argc, char** argv) {
     pthread_mutex_unlock(queue->lock); 
 
     // Once there are no tasks left in the queue to do, send workers sentinel (all-NULL) tasks so that they know to exit.
-    for (size_t i = 0; i < max_threads; i += 1) {
+    for (long i = 0; i < max_threads; i += 1) {
         mustang_task* sentinel = task_init(NULL, NULL, NULL, NULL, NULL, NULL);
         task_enqueue(queue, sentinel);
     }
 
     // Threads should have exited by this point, so join them.
-    for (size_t i = 0; i < max_threads; i += 1) {
+    for (long i = 0; i < max_threads; i += 1) {
         if (pthread_join(worker_pool[i], NULL)) {
             LOG(LOG_ERR, "Failed to join thread %0lx! (%s)\n", worker_pool[i], strerror(errno));
         }
