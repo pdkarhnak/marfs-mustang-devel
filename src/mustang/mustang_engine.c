@@ -24,7 +24,7 @@
 
 #include "hashtable.h"
 #include "mustang_threading.h"
-#include "mustang_monitors.h"
+#include "task_queue.h"
 
 size_t id_cache_capacity;
 
@@ -45,9 +45,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // FILE* log_ptr;
-
-    // If stdout not being used for logging, redirect stdout and stderr to specified file
+    // If stderr not being used for logging, redirect stdout and stderr to specified file (redirection is default behavior)
     if (strncmp(argv[5], "stderr", strlen("stderr")) != 0) {
         int log_fd = open(argv[5], O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
@@ -58,24 +56,15 @@ int main(int argc, char** argv) {
         close(log_fd);
     }
 
-    // subprocess.run() mandates passing an argument list of strings, so conversion back into numeric values required here
+    // subprocess.run() in frontend mandates passing an argument list of strings, so conversion back into numeric values required here
     char* invalid = NULL;
-    size_t capacity_power = (size_t) strtol(argv[2], &invalid, 10);
+    size_t hashtable_capacity = (size_t) strtol(argv[2], &invalid, 10);
 
-    if ((capacity_power <= 0) || (capacity_power >= 64) || 
+    if ((hashtable_capacity < 2) || (hashtable_capacity > (1 << 63)) || 
             (errno == EINVAL) || (*invalid != '\0')) {
-        LOG(LOG_ERR, "Bad hashtable capacity argument \"%s\" received. Please specify a positive integer between 1 and 64, then try again.\n", argv[2]);
+        LOG(LOG_ERR, "Bad hashtable capacity argument \"%s\" received. Please specify a positive integer between (2**1) and (2**63), then try again.\n", argv[2]);
         fclose(output_ptr);
         return 1;
-    }
-
-    size_t computed_capacity = 1;
-    computed_capacity <<= capacity_power;
-
-    if (capacity_power < 5) {
-        LOG(LOG_WARNING, "Provided hashtable capacity argument \"%s\" will result in very small capacity %zu\n", argv[2], computed_capacity);
-    } else if (capacity_power >= 33) {
-        LOG(LOG_WARNING, "Provided hashtable capacity argument \"%s\" will result in very large capacity %zu\n", argv[2], computed_capacity);
     }
 
     invalid = NULL;
