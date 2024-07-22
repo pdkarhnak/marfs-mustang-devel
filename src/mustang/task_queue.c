@@ -14,7 +14,7 @@ mustang_task* task_init(marfs_config* task_config, marfs_position* task_position
     new_task->ht = task_ht;
     new_task->ht_lock = task_ht_lock;
     new_task->queue_ptr = queue_ref;
-    new_task->traversal_func = traversal_routine;
+    new_task->task_func = traversal_routine;
     new_task->prev = NULL;
     new_task->next = NULL;
 

@@ -26,6 +26,8 @@
 #include "mustang_threading.h"
 #include "task_queue.h"
 
+extern void* thread_launcher(void* args);
+
 size_t id_cache_capacity;
 
 int main(int argc, char** argv) {
@@ -89,7 +91,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    hashtable* output_table = hashtable_init(computed_capacity);
+    hashtable* output_table = hashtable_init(hashtable_capacity);
     
     if ((output_table == NULL) || (errno == ENOMEM)) {
         LOG(LOG_ERR, "Failed to initialize hashtable (%s)\n", strerror(errno));
@@ -103,6 +105,13 @@ int main(int argc, char** argv) {
 
     if (config_path == NULL) {
         LOG(LOG_ERR, "MARFS_CONFIG_PATH not set in environment--please set and try again.\n");
+        return 1;
+    }
+
+    task_queue* queue = task_queue_init(/* TODO: add reference to queue capacity argument */);
+
+    if (queue == NULL) {
+        LOG(LOG_ERR, "Failed to initialize task queue! (%s)\n", strerror(errno));
         return 1;
     }
 
@@ -123,17 +132,37 @@ int main(int argc, char** argv) {
     }
 
     pthread_attr_t child_attr_template;
+    pthread_attr_t* attr_ptr = &child_attr_template;
     
-    if (pthread_attr_init(&child_attr_template)) {
+    if (pthread_attr_init(attr_ptr)) {
         LOG(LOG_ERR, "Failed to initialize attributes for child threads!\n");
-        return 1;
+        LOG(LOG_WARNING, "This means that stack size cannot be reduced from the default, which may overwhelm system resources unexpectedly.\n");
+        attr_ptr = NULL;
     }
 
     if (pthread_attr_setstacksize(&child_attr_template, 2 * PTHREAD_STACK_MIN)) {
         LOG(LOG_ERR, "Failed to set stack size for child threads! (%s)\n", strerror(errno));
+        LOG(LOG_WARNING, "This means that threads will proceed with the default stack size, which is unnecessarily large for this application and which may overwhelm system resources unexpectedly.\n");
+        attr_ptr = NULL;
+    }
+
+    // Malloc used here since initialization not important (pthread_ts will be changed with pthread_create())
+    pthread_t* worker_pool = (pthread_t*) malloc(max_threads * sizeof(pthread_t));
+
+    if (worker_pool == NULL) {
+        LOG(LOG_ERR, "Failed to allocate memory for worker pool! (%s)\n", strerror(errno));
         return 1;
     }
 
+    for (size_t i = 0; i < max_threads; i += 1) {
+        int create_errorcode = pthread_create(&(worker_pool[i]), attr_ptr, &thread_launcher, queue);
+        if (create_errorcode) {
+            LOG(LOG_ERR, "Failed to create thread! (%s)\n", strerror(create_errorcode));
+            return 1;
+        }
+    }
+
+    // This should be the code that creates *tasks*, not *threads*
     for (int index = 6; index < argc; index += 1) {
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
 
@@ -189,26 +218,43 @@ int main(int argc, char** argv) {
         }
 
         child_position->depth = child_depth; 
-
-        // TODO: rework pthread_create to target elements of static pthread_t array (i.e., thread pool)
-        if (pthread_create(&next_id, &child_attr_template, &thread_main, (void*) topdir_args)) {
-            LOG(LOG_ERR, "Failed to create top-level thread with target \"%s\"! (%s)\n", argv[index], strerror(errno));
-            countdown_monitor_decrement(threads_countdown_monitor, NULL);
-        } else {
-            LOG(LOG_INFO, "Created top-level thread with ID: %0lx and basepath \"%s\"\n", SHORT_ID(next_id), next_basepath);
-        }
+        // TODO: put in switch-case statement to create task according to namespace traversal or directory traversal
 
     }
 
-    // TODO: put in wait on manager_cv within queue struct and pthread_join() calls
+    pthread_mutex_lock(queue->lock);
+    while ((queue->todos > 0) && (queue->size > 0)) {
+        pthread_cond_wait(queue->manager_cv);
+    }
+    pthread_mutex_unlock(queue->lock); 
 
-    // Child threads *should* be guaranteed to have all exited by this point
+    // Once there are no tasks left in the queue to do, send workers sentinel (all-NULL) tasks so that they know to exit.
+    for (size_t i = 0; i < max_threads; i += 1) {
+        mustang_task* sentinel = task_init(NULL, NULL, NULL, NULL, NULL, NULL);
+        task_enqueue(queue, sentinel);
+    }
+
+    // Threads should have exited by this point, so join them.
+    for (size_t i = 0; i < max_threads; i += 1) {
+        if (pthread_join(worker_pool[i], NULL)) {
+            LOG(LOG_ERR, "Failed to join thread %0lx! (%s)\n", worker_pool[i], strerror(errno));
+        }
+    }
+
+    if (task_queue_destroy(queue)) {
+        LOG(LOG_ERR, "Failed to destroy task queue! (%s)\n", strerror(errno));
+        LOG(LOG_WARNING, "This is a critical application error meaning thread-safety measures have failed. You are strongly advised to disregard the output of this run and attempt another invocation.\n");
+    }
+
+    free(worker_pool);
 
     pthread_mutex_lock(&ht_lock);
     hashtable_dump(output_table, output_ptr);
     pthread_mutex_unlock(&ht_lock);
 
-    pthread_attr_destroy(&child_attr_template);
+    if (attr_ptr != NULL) {
+        pthread_attr_destroy(attr_ptr);
+    }
 
     // Clean up hashtable and associated lock state
     hashtable_destroy(output_table);
@@ -224,6 +270,6 @@ int main(int argc, char** argv) {
 
     pthread_mutex_destroy(&erasure_lock);
 
-    pthread_exit(NULL);
+    return 0;
 
 }

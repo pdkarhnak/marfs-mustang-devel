@@ -370,3 +370,33 @@ void traverse_ns(marfs_config* base_config, marfs_position* task_position, hasht
     traverse_dir(base_config, task_position, output_table, table_lock, pool_queue);
 }
 
+void* thread_launcher(void* args) {
+    task_queue* queue = (task_queue*) args;
+
+    while (1) {
+        // Wraps a wait on a task being available in the queue (a cv wait), so
+        // this function only returns when a task is successfully and 
+        // atomically acquired.
+        mustang_task* next_task = task_dequeue(queue);
+
+        if (next_task->task_func == NULL) {
+            // Special sentinel condition for parent to tell pooled threads "no more work to do".
+            free(next_task);
+            return NULL;
+        }
+
+        next_task->task_func(next_task->config, next_task->position, next_task->ht, next_task->ht_lock, queue);
+
+        pthread_mutex_lock(queue->lock); 
+        queue->todos -= 1;
+        LOG(LOG_DEBUG, "Queue todos left: %zu\n", queue->todos);
+        if (queue->todos == 0) {
+            pthread_cond_signal(queue->manager_cv);
+        }
+        pthread_mutex_unlock(queue->lock);
+
+        free(next_task);
+    }
+
+    return NULL;
+}

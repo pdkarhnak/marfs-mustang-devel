@@ -16,7 +16,7 @@ typedef struct mustang_task_struct {
     hashtable* ht;
     pthread_mutex_t* ht_lock;
     task_queue* queue_ptr;
-    void (*traversal_func)(marfs_config*, marfs_position*, task_queue*, hashtable*, pthread_mutex_t*, task_queue*);
+    void (*task_func)(marfs_config*, marfs_position*, task_queue*, hashtable*, pthread_mutex_t*, task_queue*);
     mustang_task* prev;
     mustang_task* next;
 } mustang_task;
@@ -33,7 +33,7 @@ typedef struct mustang_task_queue_struct {
     pthread_cond_t* manager_cv;
 } task_queue;
 
-mustang_task* task_init(marfs_config* task_config, marfs_position* task_position, hashtable* task_ht, pthread_mutex_t* task_ht_lock, void (*traversal_routine)(marfs_config*, marfs_position*, hashtable*, pthread_mutex_t*));
+mustang_task* task_init(marfs_config* task_config, marfs_position* task_position, hashtable* task_ht, pthread_mutex_t* task_ht_lock, task_queue* task_queue_ref, void (*traversal_routine)(marfs_config*, marfs_position*, hashtable*, pthread_mutex_t*, task_queue*));
 
 /**
  * Allocate space for, and return a pointer to, a new task_queue struct on the 
