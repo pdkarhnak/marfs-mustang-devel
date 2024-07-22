@@ -72,6 +72,8 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #define ENOATTR ENODATA
 #endif
 
+#include "mustang_logging.h"
+
 #ifdef DEBUG_MUSTANG
 #define DEBUG DEBUG_MUSTANG
 #elif (defined DEBUG_ALL)
@@ -79,7 +81,6 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #endif
 
 #define LOG_PREFIX "mustang_threading"
-#include "mustang_logging.h"
 #include <logging/logging.h>
 
 char* get_ftag(marfs_position* current_position, MDAL current_mdal, char* path) {
