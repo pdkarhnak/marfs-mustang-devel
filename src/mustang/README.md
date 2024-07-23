@@ -74,7 +74,7 @@ complete listing of arguments and usage information, see `mustang -h`.
 
 `-t` and its aliases (threads) represent the number of worker threads that will
 be pooled to accept and execute traversal tasks throughout the target
-filesystem. Any positive, nonzero integer less than or equal to $2^63$ will be 
+filesystem. Any positive, nonzero integer less than or equal to $2^{63}$ will be 
 _accepted_; however, the application will warn about excessively large argument
 values. Be aware of system limits on the number of concurrent threads which 
 may be created per process (e.g., those in `/proc/sys/kernel/threads-max` or 
