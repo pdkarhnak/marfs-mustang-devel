@@ -20,6 +20,18 @@ Naturally, MUSTANG requires [MarFS](https://github.com/mar-file-system) and its
 dependencies. Installation instructions and documentation can be found
 [here](http://mar-file-system.github.io/marfs/new_install.html).
 
+## Version history
+
+Users are strongly encouraged to use the current version (1.2.0), which is 
+implemented using a thread pool and which is far more resilient to large 
+workloads than previous versions are.
+
+Previous versions are:
+* 1.1.0: the stable version using detached threads and a monitor to enforce 
+a rough limit on the number of "active" threads at one time.
+* 1.0.0: the initial stable version using a recursive threading routine with 
+no limits on thread creation as a trade-off to prevent deadlock.
+
 # Modifying mustang
 
 Modifying the source files for `mustang_engine.c` and the dependencies is
