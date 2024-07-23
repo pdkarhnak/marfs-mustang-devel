@@ -33,7 +33,6 @@ extern void* thread_launcher(void* args);
 size_t id_cache_capacity;
 
 int main(int argc, char** argv) {
-
     errno = 0; // to guarantee an initially successful context and avoid "false positive" errno settings (errno not guaranteed to be initialized)
 
     if (argc < 7) {
@@ -318,5 +317,4 @@ int main(int argc, char** argv) {
     pthread_mutex_destroy(&erasure_lock);
 
     return 0;
-
 }

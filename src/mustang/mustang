@@ -18,8 +18,8 @@ parser.add_argument("-t", "--threads", "--threads-max", required=False, type=int
         help='Number of threads that will be created to form the program\'s thread pool and which will serve be the hard limit for the maximum number of concurrent threads (plus a manager).')
 parser.add_argument("-tc", "--tasks-max", "--task-capacity", "--tasks-capacity", "--task-queue-capacity", required=False, type=int, default=-1, metavar='TASKS',
         help='Maximum number of tasks that may reside in the thread pool task queue at one time.')
-parser.add_argument("-hc", "--hc", "--hashtable-capacity", required=False, type=int, default=16, metavar="PWR", 
-        help='Power of 2 determining output capacity (e.g., default 16 -> 2^16 -> capacity = 65536).')
+parser.add_argument("-hc", "--hc", "--hashtable-capacity", required=False, type=int, default=20, metavar="PWR", 
+        help='Power of 2 determining output capacity (e.g., default 20 -> 2^20 -> capacity = 1048576).')
 parser.add_argument("-cc", "--cc", "--cache-capacity", "--id-cache-capacity", required=False, type=int, default=16, metavar="CAPACITY", 
         help='Maximum number of unique MarFS object IDs that will be \"cached\" at one time in per-thread data structures (default: 16).') 
 parser.add_argument("-o", "--output", required=False, type=str, default=default_filename, metavar="FILE", 
@@ -50,7 +50,7 @@ if __name__ == '__main__':
     computed_capacity = 1 << args.hc
 
     engine_args = ["mustang_engine"]
-    engine_args.append(str(args.threads_max))
+    engine_args.append(str(args.threads))
     engine_args.append(str(args.tasks_max))
     engine_args.append(str(computed_capacity))
     engine_args.append(str(args.cc))
@@ -65,6 +65,9 @@ if __name__ == '__main__':
         engine_args.append("stderr")
     else:
         engine_args.append(args.logfile)
+        with open (args.logfile, 'a') as log:
+            print(f"Started at: {datetime.datetime.now()}", file=log)
+            print(80 * '=', file=log)
 
     for path_arg in args.paths:
         tmp_arg = ''
@@ -95,14 +98,21 @@ if __name__ == '__main__':
     try:
         subprocess.run(engine_args)
         shutil.move(init_output_handle, final_handle) 
-    except subprocess.CalledProcessError:
-        print("WARNING: mustang_engine process returned a non-zero exit code. Check logs for more details.", file=sys.stderr)
-    except:
-        print("Some other error occurred. Please try again.", file=sys.stderr)
-    finally:
+
         with open(final_handle, 'r') as hashtable:
             line_count = len(hashtable.readlines())
             if line_count >= (2**(args.hc)):
-                print("WARNING: The output hashtable had all entries filled, meaning object IDs may have been lost if the number of unique objects encountered exceeded the hashtable's actual capacity.", file=sys.stderr)
-                print(f"If you are concerned about object IDs being lost, you should perform another run with a greater capacity (this run had capacity argument \"{args.hc}\" resulting in {2**(args.hc)} maximum entries).", file=sys.stderr)
+                print("WARNING: the hashtable was filled to capacity, meaning that separate chaining was most likely resorted to to resolve hash collisions and ensure all unique objects were recorded.", file=sys.stderr)
+                print("This likely degraded performance. Try running with a larger hashtable capacity to speed up put() operations.", file=sys.stderr)
+    except subprocess.CalledProcessError:
+        print("WARNING: mustang_engine process returned a non-zero exit code. Check logs for more details.", file=sys.stderr)
+    except FileNotFoundError:
+        print("WARNING: Could not change name of output file to reflect that it is finalized (rather than in progress). Please check whether the file exists and (from logs) whether the program exited normally.", file=sys.stderr)
+    except:
+        print("Some other error occurred. Please try again.", file=sys.stderr)
+    finally:
+        if not (args.use_stderr):
+            with open (args.logfile, 'a') as log:
+                print(80 * '=', file=log)
+                print(f"Finished at: {datetime.datetime.now()}", file=log)
 
