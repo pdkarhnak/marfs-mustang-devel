@@ -58,7 +58,7 @@ if __name__ == '__main__':
 
     engine_args = ["mustang_engine"]
     engine_args.append(str(args.threads))
-    engine_args.append(str(args.tasks_max))
+    engine_args.append(str(args.task_capacity))
     engine_args.append(str(computed_capacity))
     engine_args.append(str(args.cc))
 

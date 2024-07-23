@@ -151,7 +151,7 @@ int task_enqueue(task_queue* queue, mustang_task* new_task) {
         queue->head = new_task;
     }
 
-    pthread_cond_signal(queue->task_available);
+    pthread_cond_broadcast(queue->task_available);
     pthread_mutex_unlock(queue->lock);
 
     return -1;
@@ -185,7 +185,7 @@ mustang_task* task_dequeue(task_queue* queue) {
 
     retrieved_task->next = NULL;
 
-    pthread_cond_signal(queue->space_available);
+    pthread_cond_broadcast(queue->space_available);
     pthread_mutex_unlock(queue->lock);
 
     return retrieved_task;
