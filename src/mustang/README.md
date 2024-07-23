@@ -1,4 +1,4 @@
-# MUSTANG
+# MUSTANG version 1.2.0
 
 Welcome to **MUSTANG**!
 * **M**arFS (_or **M**archive/**M**etadata_)
@@ -59,8 +59,9 @@ copy them to accessible MarFS bin and library locations.
 # Running mustang
 
 Directly invoking the `mustang_engine` executable is discouraged since the
-executable attempts no argument parsing. Instead, use the `mustang` frontend, 
-which will appropriately parse arguments and can print help information.
+executable attempts no substantive argument parsing. Instead, use the `mustang`
+frontend, which will appropriately parse arguments and can print help
+information.
 
 The `mustang` frontend requires at least one absolute path argument
 corresponding to an active MarFS location where traversal will begin. The
@@ -69,7 +70,47 @@ instance; rather, such an error will likely be caught within the engine itself
 and reported as a failed call to the internal MarFS traversal routine. For a
 complete listing of arguments and usage information, see `mustang -h`.
 
+## Usage considerations
+
+`-t` and its aliases (threads) represent the number of worker threads that will
+be pooled to accept and execute traversal tasks throughout the target
+filesystem. Any positive, nonzero integer less than or equal to $2^63$ will be 
+_accepted_; however, the application will warn about excessively large argument
+values. Be aware of system limits on the number of concurrent threads which 
+may be created per process (e.g., those in `/proc/sys/kernel/threads-max` or 
+`/proc/sys/vm/max_map_count`) and pass argument values responsibly.
+
+`-hc` and its aliases (hashtable capacity) represent the _power of two_ that
+the frontend computes to get the hashtable capacity. Hashtable capacity should
+be specified proportionately to the anticipated number of MarFS objects that
+will be encountered. Specifying small hashtable capacities for large targets
+_will_ work (i.e., produce a complete hashtable on output) due to the
+hashtable's separate chaining capabilities, but this is likely to needlessly
+slow hashtable operations (and, therefore application performance) due to
+requiring linear traversal and chaining operations for a progressively greater
+frequency of hash collisions as the application runs.
+
+`-tc` and its aliases (task queue capacity) correspond to the maximum length of
+the thread pool's task queue that will be allowed before `pthread_cond_wait()`
+calls when enqueueing tasks will "take effect" (i.e., force callers to sleep
+and wait on the corresponding condition variable tied to available space). By
+default, the task queue is effectively unbounded since the capacity is set to
+Linux `SIZE_MAX` (i.e., $2^{64} - 1$). Since the queue dynamically expands as
+tasks are enqueued, most applications need not worry about using an unbounded
+task queue. In fact, if an insufficiently large task queue is specified, the
+application may enter a state of livelock or deadlock as threads circularly
+wait to enqueue tasks based on other threads' ability to dequeue tasks.
+
+By default, output and logging files will be named based on timestamps recorded
+at the beginning of the program run. This is the recommended usage so that logs 
+and output files (i.e., files detailing hashtable contents) from multiple runs 
+may be kept without being overwritten.
+
 # Acknowledgments
+
+This work would not be possible without Garrett Ransom and Dave Bonnie, who 
+served as mentors during initial development from May 2024--August 2024 at 
+Los Alamos National Laboratory.
 
 # Universal Release
 
