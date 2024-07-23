@@ -14,9 +14,9 @@ default_logname = f"mustang-run-{startup_timestamp.year}{startup_timestamp.month
 parser = argparse.ArgumentParser(prog='mustang', description='Parse command-line arguments as a wrapper for the mustang_engine binary.')
 parser.add_argument("-p", "--paths", required=True, nargs='+', metavar='PATH', 
         help='One or more POSIX-like paths to recursively traverse within a MarFS instance and catalog objects along.')
-parser.add_argument("-t", "--threads-max", required=False, type=int, default=128, metavar = "THREADS",
-        help='Maximum number of threads that will be allowed to traverse directories at one time.')
-parser.add_argument("-tc", "--tasks-max", "--task-capacity", "--tasks-capacity", "--task-queue-capacity", required=False, type=int, default=1048576, metavar='TASKS',
+parser.add_argument("-t", "--threads", "--threads-max", required=False, type=int, default=256, metavar = "THREADS",
+        help='Number of threads that will be created to form the program\'s thread pool and which will serve be the hard limit for the maximum number of concurrent threads (plus a manager).')
+parser.add_argument("-tc", "--tasks-max", "--task-capacity", "--tasks-capacity", "--task-queue-capacity", required=False, type=int, default=-1, metavar='TASKS',
         help='Maximum number of tasks that may reside in the thread pool task queue at one time.')
 parser.add_argument("-hc", "--hc", "--hashtable-capacity", required=False, type=int, default=16, metavar="PWR", 
         help='Power of 2 determining output capacity (e.g., default 16 -> 2^16 -> capacity = 65536).')
@@ -32,7 +32,7 @@ logging_group.add_argument("--use-stderr", required=False, action='store_true',
         help='Do not log in a separate file and print all messages to stderr. Exclusive with -l/--logfile/--log-file.')
 
 if __name__ == '__main__': 
-    if not(os.access("./mustang_engine", os.F_OK)):
+    if not(os.access("./mustang_engine", os.F_OK)) and not(os.access("mustang_engine", os.F_OK)):
         print("Executable for MUSTANG engine does not exist! Please build it and try again.")
         exit(1)
 
@@ -92,7 +92,6 @@ if __name__ == '__main__':
 
     print(f"Using invocation: {engine_args}", file=sys.stderr)
 
-    # TODO: use Popen() constructor and manually poll returncode
     try:
         subprocess.run(engine_args)
         shutil.move(init_output_handle, final_handle) 

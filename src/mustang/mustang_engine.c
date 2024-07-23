@@ -62,21 +62,33 @@ int main(int argc, char** argv) {
 
     // subprocess.run() in frontend mandates passing an argument list of strings, so conversion back into numeric values required here
     char* invalid = NULL;
-    long max_threads = strtol(argv[1], &invalid, 10);
+    size_t max_threads = (size_t) strtol(argv[1], &invalid, 10);
 
-    if ((max_threads <= 0) || (errno == EINVAL) || (*invalid != '\0')) {
-        LOG(LOG_ERR, "Bad max threads argument \"%s\" received. Please specify a nonnegative integer (i.e. > 0), then try again.\n", argv[3]);
+    if ((errno == EINVAL) || (*invalid != '\0')) {
+        LOG(LOG_ERR, "Bad max threads argument \"%s\" received. Please specify a nonnegative integer (i.e. > 0), then try again.\n", argv[1]);
         fclose(output_ptr);
         return 1;
     }
 
-    invalid = NULL;
-    long queue_capacity = (size_t) strtol(argv[2], &invalid, 10);
+    if (max_threads > 32768) {
+        LOG(LOG_WARNING, "Using extremely large number of threads %zu. This may overwhelm system limits such as those set in /proc/sys/kernel/threads-max or /proc/sys/vm/max_map_count.\n", max_threads);
+    }
 
-    if ((queue_capacity < 0) || (errno == EINVAL) || (*invalid != '\0')) {
-        LOG(LOG_ERR, "Bad task queue capacity argument \"%s\" received. Please specify a nonnegative integer (i.e., > 0), then try again.\n", argv[4]);
-        fclose(output_ptr);
-        return 1;
+    size_t queue_capacity;
+
+    // Allow -1 as a sentinel for "unlimited" capacity
+    if (strncmp(argv[2], "-1", strlen(argv[2])) == 0) {
+        queue_capacity = SIZE_MAX;
+        LOG(LOG_INFO, "Using SIZE_MAX as queue capacity (effectively unlimited).\n");
+    } else {
+        invalid = NULL;
+        queue_capacity = (size_t) strtol(argv[2], &invalid, 10);
+
+        if ((errno == EINVAL) || (*invalid != '\0')) {
+            LOG(LOG_ERR, "Bad task queue capacity argument \"%s\" received. Please specify a nonnegative integer (i.e., > 0), then try again.\n", argv[2]);
+            fclose(output_ptr);
+            return 1;
+        }
     }
 
     if (queue_capacity < max_threads) {
@@ -84,12 +96,14 @@ int main(int argc, char** argv) {
         LOG(LOG_WARNING, "Consider passing a task queue capacity argument that is greater than or equal to the maximum number of threads so that all threads have the chance to dequeue at least one task.\n");
     }
 
+    return 0;
+
     invalid = NULL;
     long hashtable_capacity = strtol(argv[3], &invalid, 10);
 
     if ((hashtable_capacity < 2) || (((size_t) hashtable_capacity) > (HC_MAX)) || 
             (errno == EINVAL) || (*invalid != '\0')) {
-        LOG(LOG_ERR, "Bad hashtable capacity argument \"%s\" received. Please specify a positive integer between (2**1) and (2**63), then try again.\n", argv[2]);
+        LOG(LOG_ERR, "Bad hashtable capacity argument \"%s\" received. Please specify a positive integer between (2**1) and (2**63), then try again.\n", argv[3]);
         fclose(output_ptr);
         return 1;
     }
@@ -98,7 +112,7 @@ int main(int argc, char** argv) {
     long fetched_id_cache_capacity = strtol(argv[4], &invalid, 10);
 
     if ((fetched_id_cache_capacity <= 0) || (errno == EINVAL) || (*invalid != '\0')) {
-        LOG(LOG_ERR, "Bad cache capacity argument \"%s\" received. Please specify a nonnegative integer (i.e. > 0), then try again.\n", argv[3]);
+        LOG(LOG_ERR, "Bad cache capacity argument \"%s\" received. Please specify a nonnegative integer (i.e. > 0), then try again.\n", argv[4]);
         fclose(output_ptr);
         return 1;
     }
@@ -173,7 +187,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    for (long i = 0; i < max_threads; i += 1) {
+    for (size_t i = 0; i < max_threads; i += 1) {
         int create_errorcode = pthread_create(&(worker_pool[i]), attr_ptr, &thread_launcher, queue);
         if (create_errorcode) {
             LOG(LOG_ERR, "Failed to create thread! (%s)\n", strerror(create_errorcode));
@@ -181,7 +195,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    // This should be the code that creates *tasks*, not *threads*
     for (int index = 7; index < argc; index += 1) {
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
 
@@ -261,13 +274,13 @@ int main(int argc, char** argv) {
     pthread_mutex_unlock(queue->lock); 
 
     // Once there are no tasks left in the queue to do, send workers sentinel (all-NULL) tasks so that they know to exit.
-    for (long i = 0; i < max_threads; i += 1) {
+    for (size_t i = 0; i < max_threads; i += 1) {
         mustang_task* sentinel = task_init(NULL, NULL, NULL, NULL, NULL, NULL);
         task_enqueue(queue, sentinel);
     }
 
     // Threads should have exited by this point, so join them.
-    for (long i = 0; i < max_threads; i += 1) {
+    for (size_t i = 0; i < max_threads; i += 1) {
         if (pthread_join(worker_pool[i], NULL)) {
             LOG(LOG_ERR, "Failed to join thread %0lx! (%s)\n", worker_pool[i], strerror(errno));
         }

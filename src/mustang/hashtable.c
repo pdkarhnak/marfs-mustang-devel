@@ -81,6 +81,14 @@ uint64_t hashcode(hashtable* table, char* name) {
     return murmur_result[0] % (table->capacity);
 }
 
+/**
+ * An internal "private" function which initializes a separately chained node 
+ * for a hashtable's linked list of chained nodes.
+ *
+ * NOTE: users should **never** call this directly, instead relying on the 
+ * higher-level public wrappers related to hashtable initialization and put
+ * operations (in this case, put()).
+ */
 hashnode_link* hn_link_init(char* new_data) {
     hashnode_link* new_link = (hashnode_link*) calloc(1, sizeof(hashnode_link));
 
@@ -93,6 +101,15 @@ hashnode_link* hn_link_init(char* new_data) {
     return new_link;
 }
 
+/**
+ * An internal "private" function which cleans up a separately chained node 
+ * within a hashnode's linked list, freeing the chained node (the "hashnode 
+ * link") and its associated state.
+ *
+ * NOTE: as a private function, users should **never** call this directly, 
+ * instead relying on higher-level public wrappers (in this case, 
+ * hashtable_destroy()).
+ */
 int hn_link_destroy(hashnode_link* hn_link) {
     if (hn_link == NULL) {
         errno = EINVAL;
@@ -104,6 +121,15 @@ int hn_link_destroy(hashnode_link* hn_link) {
     return 0;
 }
 
+/**
+ * An internal "private" function which initializes a hashtable node and 
+ * prepares the node for separate chaining operations related to hashtable 
+ * inserts. 
+ *
+ * NOTE: as a private function, users should **never** call this directly,
+ * instead relying on higher-level public wrappers (in this case, 
+ * hashtable_init()).
+ */
 hashnode* hashnode_init(void) {
     hashnode* new_node = (hashnode*) calloc(1, sizeof(hashnode));
 
@@ -116,6 +142,19 @@ hashnode* hashnode_init(void) {
     return new_node;
 }
 
+/**
+ * An internal "private" function to check whether a string value which hashes 
+ * to the index where the current node is stored is a duplicate of any string 
+ * values currently stored in the node's separately chained data linked list.
+ *
+ * If the data is found to be a duplicate, the calling function (the public 
+ * put()) will simply "drop" the data and not add it to the table. If the data
+ * is original, put() will invoke the proper functionality to link the data to 
+ * the hashnode.
+ *
+ * NOTE: as a private function, users should **never** call this directly, 
+ * instead relying on higher-level public wrappers (in this, case, put()).
+ */
 int verify_original(hashnode* node, char* new_data) {
     hashnode_link* current_link = node->hn_links;
 
@@ -130,6 +169,15 @@ int verify_original(hashnode* node, char* new_data) {
     return 1;
 }
 
+/**
+ * An internal "private" function to chain new data to a particular hashonde's 
+ * separate chaining linked list. This function makes the necessary calls to 
+ * other private functions to initialize and prepare associated state for the 
+ * new data, then properly link it to the node's list.
+ *
+ * NOTE: as a private function, users should **never** call this directly, 
+ * instead relying on higher-level public wrappers (in this case, put()).
+ */
 int hashnode_chain(hashnode* node, char* new_link_data) {
     hashnode_link* new_link = hn_link_init(new_link_data);
 
@@ -153,6 +201,14 @@ int hashnode_chain(hashnode* node, char* new_link_data) {
     return 0;
 }
 
+/**
+ * An internal "private" function to clean up a particular hashnode and its 
+ * associated state, including its separately chained data linked list.
+ *
+ * NOTE: as a private function, users should **never** call this directly,
+ * instead relying on higher-level public wrappers (in this case, 
+ * hashtable_destroy()).
+ */
 int hashnode_destroy(hashnode* node) {
     if (node == NULL) {
         errno = EINVAL;
@@ -212,10 +268,19 @@ void put(hashtable* table, char* new_object_name) {
     }
 }
 
-int hashnode_dump(hashnode* node, FILE* output) {
-    if ((node == NULL) || (output == NULL)) {
-        errno = EINVAL;
-        return -1;
+/** 
+ * An internal "private" function to print a hashnode's full contents,
+ * including the data for all nodes in the hashnode's separately chained data
+ * linked list, to the specified stream.
+ *
+ * NOTE: as a private function, users should **never** call this directly, 
+ * instead relying on higher-level public wrappers (in this case, 
+ * hashtable_dump()).
+ */
+int hashnode_dump(hashnode* node, FILE* output) { 
+    if ((node == NULL) || (output == NULL)) { 
+        errno = EINVAL; 
+        return -1; 
     }
 
     if (node->hn_links == NULL) {

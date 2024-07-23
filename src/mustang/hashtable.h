@@ -67,16 +67,30 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 
 typedef struct hashnode_link_struct hashnode_link;
 
+/**
+ * The core building block of the hashtable: a string-and-pointer pair that 
+ * enables linked list-based separate chaining at the per-hashtable node level.
+ */
 typedef struct hashnode_link_struct {
     char* data;
     hashnode_link* next;
 } hashnode_link;
 
+/**
+ * The next level up: a hashnode containing a linked list of separately chained
+ * data nodes. Hashnodes are combined together in a flat "array" within the 
+ * hashtable itself.
+ */
 typedef struct hashnode_struct {
     size_t linked;
     hashnode_link* hn_links;
 } hashnode;
 
+/**
+ * The "visible" hashtable structure that client/user code sees.
+ * `stored_nodes` are each hashnode struct pointers, and the collection is 
+ * allocated according to `capacity`.
+ */
 typedef struct hashtable_struct {  
     size_t capacity;
     hashnode** stored_nodes;
@@ -84,13 +98,16 @@ typedef struct hashtable_struct {
 
 /**
  * Initialize a hashtable on the heap, including space for all `new_capacity`
- * hashnodes.
+ * hashnodes. As part of the table initialization, this function invokes 
+ * necessary functionality to allocate state for each hashnode and prepare 
+ * separate chaining.
  */
 hashtable* hashtable_init(size_t new_capacity);
 
 /**
  * Destroy a hashtable on the heap, freeing all memory associated with the
- * table including the space for all `table->capacity` nodes.
+ * table including the space for all `table->capacity` nodes and their 
+ * associated state of their linked lists maintained for separate chaining.
  */
 void hashtable_destroy(hashtable* table);
 
@@ -102,20 +119,22 @@ void hashtable_destroy(hashtable* table);
  *
  * NOTE: in a case of application-specific behavior, this function always
  * succeeds (and thus does not return anything). The function will either
- * insert the object name into the table if it is not present at the computed
- * index or will simply return without inserting upon encountering a duplicate.
+ * insert the object name into the table (including through internal separate 
+ * chaining functionality) if it is not present at the computed index or will 
+ * simply return without inserting upon encountering a duplicate.
  */
 void put(hashtable* table, char* new_object_name);
 
-/**
- * A helper function to print the contents of non-NULL hashnodes in a hashtable
- * to the file referenced by the pointer `output`.
+/** 
+ * A helper function to print the contents of non-empty hashnodes, including 
+ * the contents of their linked lists maintained for separate chaining, in a
+ * hashtable to the file referenced by the pointer `output`.
  *
- * NOTE: this function assumes any synchronization measures (locking an 
- * associated mutex for hashtable `table`, etc.) have already been taken. In 
- * mustang, the engine (main routine) locks and unlocks the associated mutex 
+ * NOTE: this function assumes any synchronization measures (locking an
+ * associated mutex for hashtable `table`, etc.) have already been taken. In
+ * mustang, the engine (main routine) locks and unlocks the associated mutex
  * around a call to this function to satisfy the synchronization assumptions.
- * Do not otherwise call this function without appropriately synchronizing on 
+ * Do not otherwise call this function without appropriately synchronizing on
  * the hashtable.
  */
 int hashtable_dump(hashtable* table, FILE* output);
