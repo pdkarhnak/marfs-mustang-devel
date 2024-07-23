@@ -81,10 +81,103 @@ uint64_t hashcode(hashtable* table, char* name) {
     return murmur_result[0] % (table->capacity);
 }
 
+hashnode_link* hn_link_init(char* new_data) {
+    hashnode_link* new_link = (hashnode_link*) calloc(1, sizeof(hashnode_link));
+
+    if (new_link == NULL) {
+        return NULL;
+    }
+
+    new_link->data = strdup(new_data);
+    new_link->next = NULL;
+    return new_link;
+}
+
+int hn_link_destroy(hashnode_link* hn_link) {
+    if (hn_link == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    free(hn_link->data);
+    free(hn_link);
+    return 0;
+}
+
+hashnode* hashnode_init(void) {
+    hashnode* new_node = (hashnode*) calloc(1, sizeof(hashnode));
+
+    if (new_node == NULL) {
+        return NULL;
+    }
+    
+    new_node->linked = 0;
+    new_node->hn_links = NULL;
+    return new_node;
+}
+
+int verify_original(hashnode* node, char* new_data) {
+    hashnode_link* current_link = node->hn_links;
+
+    for (size_t i = 0; i < node->linked; i += 1) {
+        if (strncmp(current_link->data, new_data, strlen(current_link->data)) == 0) {
+            return 0;
+        }
+
+        current_link = current_link->next;
+    }
+
+    return 1;
+}
+
+int hashnode_chain(hashnode* node, char* new_link_data) {
+    hashnode_link* new_link = hn_link_init(new_link_data);
+
+    if (new_link == NULL) {
+        return -1;
+    }
+
+    if (node->hn_links == NULL) {
+        node->hn_links = new_link;
+    } else {
+        hashnode_link* tail_link = node->hn_links;
+
+        for (size_t i = 0; i < (node->linked - 1); i += 1) {
+            tail_link = tail_link->next;
+        }
+
+        tail_link->next = new_link;
+    }
+
+    node->linked += 1;
+    return 0;
+}
+
+int hashnode_destroy(hashnode* node) {
+    if (node == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    hashnode_link* current_link = node->hn_links;
+
+    for (size_t i = 0; i < node->linked; i += 1) {
+        hashnode_link* next_link = current_link->next;
+        hn_link_destroy(current_link);
+        current_link = next_link;
+    }
+
+    node->linked = 0;
+    node->hn_links = NULL;
+    free(node);
+
+    return 0;
+}
+
 hashtable* hashtable_init(size_t new_capacity) {
     hashtable* new_table = calloc(1, sizeof(hashtable));
 
-    new_table->stored_nodes = (char**) calloc(new_capacity, sizeof(char*));
+    new_table->stored_nodes = (hashnode**) calloc(new_capacity, sizeof(hashnode*));
 
     if (new_table == NULL) {
         return NULL;
@@ -93,7 +186,7 @@ hashtable* hashtable_init(size_t new_capacity) {
     new_table->capacity = new_capacity;
 
     for (size_t node_index = 0; node_index < new_capacity; node_index += 1) {
-        new_table->stored_nodes[node_index] = NULL;
+        new_table->stored_nodes[node_index] = hashnode_init();
     }
 
     return new_table;
@@ -101,20 +194,11 @@ hashtable* hashtable_init(size_t new_capacity) {
 
 void hashtable_destroy(hashtable* table) {
     for (size_t node_index = 0; node_index < table->capacity; node_index += 1) {
-        if (table->stored_nodes[node_index]) {
-            free(table->stored_nodes[node_index]);
-        }
+        hashnode_destroy((table->stored_nodes)[node_index]);
     }
     
     free(table->stored_nodes);
     free(table); 
-}
-
-char* get(hashtable* table, char* key) {
-    // Recompute the hash to see which index (and, therefore, which relevant
-    // node) to search
-    uint64_t computed_hashcode = hashcode(table, key); 
-    return table->stored_nodes[computed_hashcode];
 }
 
 void put(hashtable* table, char* new_object_name) {
@@ -123,18 +207,34 @@ void put(hashtable* table, char* new_object_name) {
     
     uint64_t mapped_hashcode = hashcode(table, new_object_name);
 
-    if ((table->stored_nodes)[mapped_hashcode] != NULL) {
-        return;
-    } else {
-        (table->stored_nodes)[mapped_hashcode] = strdup(new_object_name);
+    if (verify_original((table->stored_nodes)[mapped_hashcode], new_object_name)) {
+        hashnode_chain((table->stored_nodes)[mapped_hashcode], new_object_name);
     }
+}
+
+int hashnode_dump(hashnode* node, FILE* output) {
+    if ((node == NULL) || (output == NULL)) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    if (node->hn_links == NULL) {
+        return 0;
+    }
+
+    hashnode_link* current_link = node->hn_links;
+
+    for (size_t i = 0; i < node->linked; i += 1) {
+        fprintf(output, "%s\n", current_link->data);
+        current_link = current_link->next;
+    }
+
+    return 0;
 }
 
 int hashtable_dump(hashtable* table, FILE* output) {
     for (size_t index = 0; index < table->capacity; index += 1) {
-        if ((table->stored_nodes)[index] != NULL) {
-            fprintf(output, "Index %zu:\t%s\n", index, (table->stored_nodes)[index]);
-        }
+        hashnode_dump((table->stored_nodes)[index], output);
     }
 
     return fclose(output);

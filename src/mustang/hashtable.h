@@ -65,9 +65,21 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 
 #define KEY_SEED 43 // a prime number arbitrarily and pseudorandomly chosen from the range [13, 173] to seed the hashing algorithm
 
+typedef struct hashnode_link_struct hashnode_link;
+
+typedef struct hashnode_link_struct {
+    char* data;
+    hashnode_link* next;
+} hashnode_link;
+
+typedef struct hashnode_struct {
+    size_t linked;
+    hashnode_link* hn_links;
+} hashnode;
+
 typedef struct hashtable_struct {  
     size_t capacity;
-    char** stored_nodes;
+    hashnode** stored_nodes;
 } hashtable;
 
 /**
@@ -78,20 +90,9 @@ hashtable* hashtable_init(size_t new_capacity);
 
 /**
  * Destroy a hashtable on the heap, freeing all memory associated with the
- * table including the space for all CAPACITY nodes.
+ * table including the space for all `table->capacity` nodes.
  */
 void hashtable_destroy(hashtable* table);
-
-/** 
- * The public function to get an associated value for a particular key.
- * 
- * Given a name (intended alphanumeric object name string), return the stored
- * copy of the name if stored in the table.
- *
- * Returns: associated copy of key from table if key represented in given
- * table, sentinel NULL otherwise.
- */
-char* get(hashtable* table, char* name_key);
 
 /** 
  * The public function to insert an object name into a particular hash table.
