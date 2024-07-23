@@ -306,15 +306,17 @@ int main(int argc, char** argv) {
 
         new_task_position->depth = new_task_depth; 
 
+        mustang_task* top_task;
+
         switch (new_task_depth) {
             case 0:
-                mustang_task* top_ns_task = task_init(parent_config, new_task_position, output_table, &ht_lock, queue, &traverse_ns);
-                task_enqueue(queue, top_ns_task);
+                top_task = task_init(parent_config, new_task_position, output_table, &ht_lock, queue, &traverse_ns);
+                task_enqueue(queue, top_task);
                 LOG(LOG_DEBUG, "Created top-level namespace traversal task at basepath: \"%s\"\n", next_basepath);
                 break;
             default:
-                mustang_task* top_dir_task = task_init(parent_config, new_task_position, output_table, &ht_lock, queue, &traverse_dir);
-                task_enqueue(queue, top_dir_task);
+                top_task = task_init(parent_config, new_task_position, output_table, &ht_lock, queue, &traverse_dir);
+                task_enqueue(queue, top_task);
                 LOG(LOG_DEBUG, "Created top-level directory traversal task at basepath: \"%s\"\n", next_basepath);
                 break;
         }
