@@ -12,6 +12,7 @@ default_filename = f"mustang-output-{startup_timestamp.year}{startup_timestamp.m
 default_logname = f"mustang-run-{startup_timestamp.year}{startup_timestamp.month}{startup_timestamp.day}-{startup_timestamp.hour}-{startup_timestamp.minute}-{startup_timestamp.second}.log"
 
 parser = argparse.ArgumentParser(prog='mustang', description='Parse command-line arguments as a wrapper for the mustang_engine binary.')
+
 parser.add_argument("-p", "--paths", required=True, nargs='+', metavar='PATH', 
         help='One or more POSIX-like paths to recursively traverse within a MarFS instance and catalog objects along.')
 parser.add_argument("-t", "--threads", "--threads-max", required=False, type=int, default=256, metavar = "THREADS",
@@ -24,6 +25,12 @@ parser.add_argument("-cc", "--cc", "--cache-capacity", "--id-cache-capacity", re
         help='Maximum number of unique MarFS object IDs that will be \"cached\" at one time in per-thread data structures (default: 16).') 
 parser.add_argument("-o", "--output", required=False, type=str, default=default_filename, metavar="FILE", 
         help='Output file where names of catalogged objects (as maintained in the program\'s hashtable) will be written.')
+
+version_str = \
+        "MUSTANG (MarFS/Marchive Underlying Storage Tree and Namespace Gatherer) version 1.2.0, by Paul D. Karhnak. See MarFS copyright for more information."
+
+
+parser.add_argument("--version", action='version', help='Print version and license information, then exit.', version=version_str)
 
 logging_group = parser.add_mutually_exclusive_group()
 logging_group.add_argument("-l", "--logfile", "--log-file", required=False, type=str, nargs=1, default=default_logname, metavar="LOGFILE",
@@ -66,8 +73,9 @@ if __name__ == '__main__':
     else:
         engine_args.append(args.logfile)
         with open (args.logfile, 'a') as log:
-            print(f"Started at: {datetime.datetime.now()}", file=log)
-            print(80 * '=', file=log)
+            print(42 * '=', file=log)
+            print(f"| Started at: {datetime.datetime.now()} |", file=log)
+            print(42 * '=', file=log)
 
     for path_arg in args.paths:
         tmp_arg = ''
@@ -113,6 +121,7 @@ if __name__ == '__main__':
     finally:
         if not (args.use_stderr):
             with open (args.logfile, 'a') as log:
-                print(80 * '=', file=log)
-                print(f"Finished at: {datetime.datetime.now()}", file=log)
+                print(43 * '=', file=log)
+                print(f"| Finished at: {datetime.datetime.now()} |", file=log)
+                print(43 * '=', file=log)
 
