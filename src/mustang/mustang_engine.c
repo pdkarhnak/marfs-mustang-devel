@@ -96,8 +96,6 @@ int main(int argc, char** argv) {
         LOG(LOG_WARNING, "Consider passing a task queue capacity argument that is greater than or equal to the maximum number of threads so that all threads have the chance to dequeue at least one task.\n");
     }
 
-    return 0;
-
     invalid = NULL;
     long hashtable_capacity = strtol(argv[3], &invalid, 10);
 
