@@ -225,17 +225,18 @@ void traverse_dir(marfs_config* base_config, marfs_position* task_position, hash
             }
 
             new_dir_position->depth = new_depth;
+            mustang_task* new_task;
 
             // depth == -1 case (config_traverse() error) has already been handled, so presuming that 0 and > 0 are exhaustive is safe.
             switch (new_depth) {
                 case 0:
-                    mustang_task* new_ns_task = task_init(base_config, new_dir_position, output_table, table_lock, pool_queue, &traverse_ns);
-                    task_enqueue(pool_queue, new_ns_task);
+                    new_task = task_init(base_config, new_dir_position, output_table, table_lock, pool_queue, &traverse_ns);
+                    task_enqueue(pool_queue, new_task);
                     LOG(LOG_DEBUG, "Created new task to traverse namespace \"%s\"\n", new_basepath);
                     break;
                 default:
-                    mustang_task* new_dir_task = task_init(base_config, new_dir_position, output_table, table_lock, pool_queue, &traverse_dir);
-                    task_enqueue(pool_queue, new_dir_task);
+                    new_task = task_init(base_config, new_dir_position, output_table, table_lock, pool_queue, &traverse_dir);
+                    task_enqueue(pool_queue, new_task);
                     LOG(LOG_DEBUG, "Created new task to traverse directory \"%s\"\n", new_basepath);
                     break;
             }
