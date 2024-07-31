@@ -65,7 +65,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <tagging/tagging.h>
 #include <datastream/datastream.h>
 #include "mustang_threading.h"
-#include "task_queue.h"
+#include "task_dispenser.h"
 #include "id_cache.h"
 
 #ifndef ENOATTR
@@ -165,7 +165,7 @@ char* get_ftag(marfs_position* current_position, MDAL current_mdal, char* path) 
  * always logged to the logfile passed as a program argument since all 
  * build settings at least log errors.
  */
-void traverse_dir(marfs_config* base_config, marfs_position* task_position, hashtable* output_table, pthread_mutex_t* table_lock, task_queue* pool_queue) {
+void traverse_dir(marfs_config* base_config, marfs_position* task_position, hashtable* output_table, pthread_mutex_t* table_lock, task_dispenser* pool_dispenser) {
     id_cache* this_id_cache = id_cache_init(id_cache_capacity);
 
     if (this_id_cache == NULL) {
@@ -277,13 +277,13 @@ void traverse_dir(marfs_config* base_config, marfs_position* task_position, hash
             // depth == -1 case (config_traverse() error) has already been handled, so presuming that 0 and > 0 are exhaustive is safe.
             switch (new_depth) {
                 case 0:
-                    new_task = task_init(base_config, new_dir_position, output_table, table_lock, pool_queue, &traverse_ns);
-                    task_enqueue(pool_queue, new_task);
+                    new_task = task_init(base_config, new_dir_position, output_table, table_lock, pool_dispenser, &traverse_ns);
+                    task_push(pool_dispenser, new_task, (random() % pool_dispenser->size));
                     LOG(LOG_DEBUG, "Created new task to traverse namespace \"%s\"\n", new_basepath);
                     break;
                 default:
-                    new_task = task_init(base_config, new_dir_position, output_table, table_lock, pool_queue, &traverse_dir);
-                    task_enqueue(pool_queue, new_task);
+                    new_task = task_init(base_config, new_dir_position, output_table, table_lock, pool_dispenser, &traverse_dir);
+                    task_push(pool_dispenser, new_task, (random() % pool_dispenser->size));
                     LOG(LOG_DEBUG, "Created new task to traverse directory \"%s\"\n", new_basepath);
                     break;
             }
@@ -375,7 +375,7 @@ void traverse_dir(marfs_config* base_config, marfs_position* task_position, hash
  * failure. Failures are always logged to the relevant logfile since all build
  * settings for MUSTANG log errors.
  */
-void traverse_ns(marfs_config* base_config, marfs_position* task_position, hashtable* output_table, pthread_mutex_t* table_lock, task_queue* pool_queue) {
+void traverse_ns(marfs_config* base_config, marfs_position* task_position, hashtable* output_table, pthread_mutex_t* table_lock, task_dispenser* pool_dispenser) {
     // Attempt to fortify the thread's position (if not already fortified) and check for errors
     if ((task_position->ctxt == NULL) && config_fortifyposition(task_position)) {
         LOG(LOG_ERR, "Failed to fortify MarFS position!\n");
@@ -384,7 +384,7 @@ void traverse_ns(marfs_config* base_config, marfs_position* task_position, hasht
 
     // Namespaces may contain other namespaces. Examine first the subspace list
     // for the current NS to see if tasks to traverse subspaces need to be 
-    // enqueued.
+    // dispensed.
     if (task_position->ns->subnodes) {
 
         for (size_t subnode_index = 0; subnode_index < task_position->ns->subnodecount; subnode_index += 1) {
@@ -408,8 +408,8 @@ void traverse_ns(marfs_config* base_config, marfs_position* task_position, hasht
             }
 
             // subspaces of this namespace are namespaces "prima facie" --- automatically create traverse_ns task
-            mustang_task* new_ns_task = task_init(base_config, new_ns_position, output_table, table_lock, pool_queue, &traverse_ns);
-            task_enqueue(pool_queue, new_ns_task);
+            mustang_task* new_ns_task = task_init(base_config, new_ns_position, output_table, table_lock, pool_dispenser, &traverse_ns);
+            task_push(pool_dispenser, new_ns_task, (random() % pool_dispenser->size));
             LOG(LOG_DEBUG, "Created new namespace traversal task at basepath: \"%s\"\n", new_ns_path);
             free(new_ns_path);
         }
@@ -418,24 +418,26 @@ void traverse_ns(marfs_config* base_config, marfs_position* task_position, hasht
     // Namespaces may also contain subdirectories and files. Proceed to the 
     // directory traversal routine (the "regular" common case) and examine any
     // other namespace contents.
-    traverse_dir(base_config, task_position, output_table, table_lock, pool_queue);
+    traverse_dir(base_config, task_position, output_table, table_lock, pool_dispenser);
 }
 
 /**
  * The "main" for each thread. Here, threads start executing, poll the task
- * queue for work to do continuously, perform tasks as they dequeue them, and
+ * dispenser for work to do continuously, perform tasks as they pop them, and
  * clean up their state if the parent indicates that there exists no more work 
  * to do.
  */
 void* thread_launcher(void* args) {
-    task_queue* queue = (task_queue*) args;
+    threadstate* this_state = (threadstate*) args;
+    task_dispenser* dispenser = this_state->threads_task_dispenser;
+    const size_t this_id = this_state->thread_id;
     errno = 0; // Since errno not guaranteed to be zero-initialized
 
     while (1) {
-        // Wraps a wait on a task being available in the queue (a cv wait), so
+        // Wraps a wait on a task being available in the dispenser (a cv wait), so
         // this function only returns when a task is successfully and 
         // atomically acquired.
-        mustang_task* next_task = task_dequeue(queue);
+        mustang_task* next_task = task_pop(dispenser, this_id);
 
         if (next_task->task_func == NULL) {
             // Special sentinel condition for parent to tell pooled threads "no more work to do".
@@ -446,23 +448,23 @@ void* thread_launcher(void* args) {
         // In all other circumstances, tasks will be initialized with a
         // function pointer indicating what work (traversing a namespace or
         // traversing a directory) needs to be performed, so jump to that.
-        next_task->task_func(next_task->config, next_task->position, next_task->ht, next_task->ht_lock, queue);
+        next_task->task_func(next_task->config, next_task->position, next_task->ht, next_task->ht_lock, dispenser);
 
-        pthread_mutex_lock(queue->lock); 
+        pthread_mutex_lock(dispenser->manager_lock); 
         
         // Decrement the number of tasks to do *after* the task execution has
         // returned (even when failing) so that the parent is not signaled to
         // clean up state while threads may be using it in tasks.
-        queue->todos -= 1;
-        LOG(LOG_DEBUG, "Queue todos left: %zu\n", queue->todos);
+        dispenser->todos -= 1;
+        LOG(LOG_DEBUG, "Queue todos left: %zu\n", dispenser->todos);
 
-        if (queue->todos == 0) {
+        if (dispenser->todos == 0) {
             // If no other tasks to do, signal the parent to wake up and clean 
             // up shared state.
-            pthread_cond_signal(queue->manager_cv);
+            pthread_cond_signal(dispenser->manager_cv);
         }
 
-        pthread_mutex_unlock(queue->lock);
+        pthread_mutex_unlock(dispenser->manager_lock);
 
         // Task functions already abandon the position and free the associated
         // memory. Other state (config, hashtable + lock, etc.) is held by the

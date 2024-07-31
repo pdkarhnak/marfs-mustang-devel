@@ -65,7 +65,14 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <config/config.h>
 #include <mdal/mdal.h>
 #include "hashtable.h"
-#include "task_queue.h"
+#include "task_dispenser.h"
+
+typedef struct threadstate_struct threadstate;
+
+typedef struct threadstate_struct {
+    task_dispenser* threads_task_dispenser;
+    size_t thread_id;
+} threadstate;
 
 extern size_t id_cache_capacity;
 
@@ -107,7 +114,7 @@ char* get_ftag(marfs_position* current_position, MDAL current_mdal, char* path);
  * always logged to the logfile passed as a program argument since all 
  * build settings at least log errors.
  */
-void traverse_dir(marfs_config* base_config, marfs_position* task_position, hashtable* output_table, pthread_mutex_t* table_lock, task_queue* pool_queue);
+void traverse_dir(marfs_config* base_config, marfs_position* task_position, hashtable* output_table, pthread_mutex_t* table_lock, task_dispenser* pool_dispenser);
 
 /**
  * Using a task's parameters, check the namespace that the current setting of
@@ -121,6 +128,6 @@ void traverse_dir(marfs_config* base_config, marfs_position* task_position, hash
  * failure. Failures are always logged to the relevant logfile since all build
  * settings for MUSTANG log errors.
  */
-void traverse_ns(marfs_config* base_config, marfs_position* task_position, hashtable* output_table, pthread_mutex_t* table_lock, task_queue* pool_queue);
+void traverse_ns(marfs_config* base_config, marfs_position* task_position, hashtable* output_table, pthread_mutex_t* table_lock, task_dispenser* pool_dispenser);
 
 #endif

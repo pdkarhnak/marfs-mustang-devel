@@ -65,6 +65,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include <errno.h>
 #include <pthread.h>
 #include <limits.h>
+#include <time.h>
 #include <marfs.h>
 #include <config/config.h>
 #include <datastream/datastream.h>
@@ -82,7 +83,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 
 #include "hashtable.h"
 #include "mustang_threading.h"
-#include "task_queue.h"
+#include "task_dispenser.h"
 
 #define HC_MAX ((size_t) 1 << 63)
 
@@ -93,13 +94,15 @@ size_t id_cache_capacity;
 int main(int argc, char** argv) {
     errno = 0; // to guarantee an initially successful context and avoid "false positive" errno settings (errno not guaranteed to be initialized)
 
-    if (argc < 7) {
+    srandom(time(NULL));
+
+    if (argc < 6) {
         printf("USAGE: ./mustang-engine [max threads] [hashtable capacity exponent] [cache capacity] [output file] [log file] [paths, ...]\n");
         printf("\tHINT: see mustang wrapper or invoke \"mustang -h\" for more details.\n");
         return 1;
     } 
 
-    FILE* output_ptr = fopen(argv[5], "w");
+    FILE* output_ptr = fopen(argv[4], "w");
 
     if (output_ptr == NULL) {
         LOG(LOG_ERR, "Failed to open file \"%s\" for writing to output (%s)\n", argv[4], strerror(errno));
@@ -108,7 +111,7 @@ int main(int argc, char** argv) {
 
     // If stderr not being used for logging, redirect stdout and stderr to specified file (redirection is default behavior)
     if (strncmp(argv[6], "stderr", strlen("stderr")) != 0) {
-        int log_fd = open(argv[6], O_WRONLY | O_CREAT | O_APPEND, 0644);
+        int log_fd = open(argv[5], O_WRONLY | O_CREAT | O_APPEND, 0644);
 
         if (dup2(log_fd, STDERR_FILENO) == -1) {
             printf("Failed to redirect stderr! (%s)\n", strerror(errno));
@@ -131,30 +134,8 @@ int main(int argc, char** argv) {
         LOG(LOG_WARNING, "Using extremely large number of threads %zu. This may overwhelm system limits such as those set in /proc/sys/kernel/threads-max or /proc/sys/vm/max_map_count.\n", max_threads);
     }
 
-    size_t queue_capacity;
-
-    // Allow -1 as a sentinel for "unlimited" capacity
-    if (strncmp(argv[2], "-1", strlen(argv[2])) == 0) {
-        queue_capacity = SIZE_MAX;
-        LOG(LOG_INFO, "Using SIZE_MAX as queue capacity (effectively unlimited).\n");
-    } else {
-        invalid = NULL;
-        queue_capacity = (size_t) strtol(argv[2], &invalid, 10);
-
-        if ((errno == EINVAL) || (*invalid != '\0')) {
-            LOG(LOG_ERR, "Bad task queue capacity argument \"%s\" received. Please specify a nonnegative integer (i.e., > 0), then try again.\n", argv[2]);
-            fclose(output_ptr);
-            return 1;
-        }
-    }
-
-    if (queue_capacity < max_threads) {
-        LOG(LOG_WARNING, "Task queue capacity is less than maximum number of threads (i.e., thread pool size), which will limit concurrency by not taking full advantage of the thread pool.\n");
-        LOG(LOG_WARNING, "Consider passing a task queue capacity argument that is greater than or equal to the maximum number of threads so that all threads have the chance to dequeue at least one task.\n");
-    }
-
     invalid = NULL;
-    long hashtable_capacity = strtol(argv[3], &invalid, 10);
+    long hashtable_capacity = strtol(argv[2], &invalid, 10);
 
     if ((hashtable_capacity < 2) || (((size_t) hashtable_capacity) > (HC_MAX)) || 
             (errno == EINVAL) || (*invalid != '\0')) {
@@ -164,7 +145,7 @@ int main(int argc, char** argv) {
     }
 
     invalid = NULL;
-    long fetched_id_cache_capacity = strtol(argv[4], &invalid, 10);
+    long fetched_id_cache_capacity = strtol(argv[3], &invalid, 10);
 
     if ((fetched_id_cache_capacity <= 0) || (errno == EINVAL) || (*invalid != '\0')) {
         LOG(LOG_ERR, "Bad cache capacity argument \"%s\" received. Please specify a nonnegative integer (i.e. > 0), then try again.\n", argv[4]);
@@ -196,10 +177,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    task_queue* queue = task_queue_init((size_t) queue_capacity);
+    task_dispenser* dispenser = task_dispenser_init(max_threads);
 
-    if (queue == NULL) {
-        LOG(LOG_ERR, "Failed to initialize task queue! (%s)\n", strerror(errno));
+    if (dispenser == NULL) {
+        LOG(LOG_ERR, "Failed to initialize task dispenser! (%s)\n", strerror(errno));
         return 1;
     }
 
@@ -242,15 +223,19 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    threadstate thread_states[max_threads];
+
     for (size_t i = 0; i < max_threads; i += 1) {
-        int create_errorcode = pthread_create(&(worker_pool[i]), attr_ptr, &thread_launcher, queue);
+        threadstate new_state = { .threads_task_dispenser = dispenser, .thread_id = i };
+        thread_states[i] = new_state;
+        int create_errorcode = pthread_create(&(worker_pool[i]), attr_ptr, &thread_launcher, (void*) (&thread_states[i]));
         if (create_errorcode) {
             LOG(LOG_ERR, "Failed to create thread! (%s)\n", strerror(create_errorcode));
             return 1;
         }
     }
 
-    for (int index = 7; index < argc; index += 1) {
+    for (int index = 6; index < argc; index += 1) {
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
 
         struct stat arg_statbuf;
@@ -310,13 +295,13 @@ int main(int argc, char** argv) {
 
         switch (new_task_depth) {
             case 0:
-                top_task = task_init(parent_config, new_task_position, output_table, &ht_lock, queue, &traverse_ns);
-                task_enqueue(queue, top_task);
+                top_task = task_init(parent_config, new_task_position, output_table, &ht_lock, dispenser, &traverse_ns);
+                task_push(dispenser, top_task, (random() % dispenser->size));
                 LOG(LOG_DEBUG, "Created top-level namespace traversal task at basepath: \"%s\"\n", next_basepath);
                 break;
             default:
-                top_task = task_init(parent_config, new_task_position, output_table, &ht_lock, queue, &traverse_dir);
-                task_enqueue(queue, top_task);
+                top_task = task_init(parent_config, new_task_position, output_table, &ht_lock, dispenser, &traverse_dir);
+                task_push(dispenser, top_task, (random() % dispenser->size));
                 LOG(LOG_DEBUG, "Created top-level directory traversal task at basepath: \"%s\"\n", next_basepath);
                 break;
         }
@@ -324,16 +309,16 @@ int main(int argc, char** argv) {
         free(next_basepath);
     }
 
-    pthread_mutex_lock(queue->lock);
-    while ((queue->todos > 0) || (queue->size > 0)) {
-        pthread_cond_wait(queue->manager_cv, queue->lock);
+    pthread_mutex_lock(dispenser->manager_lock);
+    while (dispenser->todos > 0) {
+        pthread_cond_wait(dispenser->manager_cv, dispenser->manager_lock);
     }
-    pthread_mutex_unlock(queue->lock); 
+    pthread_mutex_unlock(dispenser->manager_lock);
 
-    // Once there are no tasks left in the queue to do, send workers sentinel (all-NULL) tasks so that they know to exit.
+    // Once there are no tasks left in the dispenser to do, send workers sentinel (all-NULL) tasks so that they know to exit.
     for (size_t i = 0; i < max_threads; i += 1) {
         mustang_task* sentinel = task_init(NULL, NULL, NULL, NULL, NULL, NULL);
-        task_enqueue(queue, sentinel);
+        task_push(dispenser, sentinel, i);
     }
 
     // Threads should have exited by this point, so join them.
@@ -343,8 +328,8 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (task_queue_destroy(queue)) {
-        LOG(LOG_ERR, "Failed to destroy task queue! (%s)\n", strerror(errno));
+    if (task_dispenser_destroy(dispenser)) {
+        LOG(LOG_ERR, "Failed to destroy task dispenser! (%s)\n", strerror(errno));
         LOG(LOG_WARNING, "This is a critical application error meaning thread-safety measures have failed. You are strongly advised to disregard the output of this run and attempt another invocation.\n");
     }
 
