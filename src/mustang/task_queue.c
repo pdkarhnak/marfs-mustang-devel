@@ -95,6 +95,7 @@ mustang_task* task_init(marfs_config* task_config, marfs_position* task_position
  * Returns: valid pointer to task_queue struct on success, or NULL on failure.
  *
  * NOTE: this function may return NULL under any of the following conditions:
+ * - Zero argument for capacity (errno set to EINVAL)
  * - Failure to calloc() queue space 
  * - Failure to calloc() queue mutex
  * - pthread_mutex_init() failure for queue mutex

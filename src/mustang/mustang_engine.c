@@ -84,6 +84,7 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include "mustang_threading.h"
 #include "task_queue.h"
 
+// Maximum hashtable capacity: 2^63
 #define HC_MAX ((size_t) 1 << 63)
 
 extern void* thread_launcher(void* args);
@@ -131,6 +132,7 @@ int main(int argc, char** argv) {
         LOG(LOG_WARNING, "Using extremely large number of threads %zu. This may overwhelm system limits such as those set in /proc/sys/kernel/threads-max or /proc/sys/vm/max_map_count.\n", max_threads);
     }
 
+    // Parse argument for queue capacity
     size_t queue_capacity;
 
     // Allow -1 as a sentinel for "unlimited" capacity
@@ -153,6 +155,7 @@ int main(int argc, char** argv) {
         LOG(LOG_WARNING, "Consider passing a task queue capacity argument that is greater than or equal to the maximum number of threads so that all threads have the chance to dequeue at least one task.\n");
     }
 
+    // Parse argument for hashtable capacity
     invalid = NULL;
     long hashtable_capacity = strtol(argv[3], &invalid, 10);
 
@@ -163,6 +166,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // Parse argument for per-thread object ID cache capacity
     invalid = NULL;
     long fetched_id_cache_capacity = strtol(argv[4], &invalid, 10);
 
@@ -172,13 +176,15 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    id_cache_capacity = (size_t) fetched_id_cache_capacity; // cast afterwards to allow detecting negative values
+    // Set the global, which is treated as a constant by the worker threads,
+    // to the successfully parsed value.
+    id_cache_capacity = (size_t) fetched_id_cache_capacity; 
 
     if (id_cache_capacity > 1024) {
         LOG(LOG_WARNING, "Provided cache capacity argument will result in large per-thread data structures, which may overwhelm the heap.\n");
     }
 
-
+    // Begin state initialization
     hashtable* output_table = hashtable_init((size_t) hashtable_capacity);
     
     if ((output_table == NULL) || (errno == ENOMEM)) {
@@ -189,6 +195,9 @@ int main(int argc, char** argv) {
 
     pthread_mutex_t ht_lock = PTHREAD_MUTEX_INITIALIZER;
 
+    // Other tools like `marfs-verifyconf` rely on this environment variable.
+    // If this is not set, the user has "bigger" problems and needs to check
+    // their MarFS installation/instance.
     char* config_path = getenv("MARFS_CONFIG_PATH");
 
     if (config_path == NULL) {
@@ -205,6 +214,7 @@ int main(int argc, char** argv) {
 
     pthread_mutex_t erasure_lock = PTHREAD_MUTEX_INITIALIZER;
 
+    // Worker threads will get `parent_config`, but treat it as read-only
     marfs_config* parent_config = config_init(config_path, &erasure_lock);    
     marfs_position parent_position = { .ns = NULL, .depth = 0, .ctxt = NULL };
 
@@ -219,19 +229,23 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // Attempt to reduce threads' stack size from 8 MiB (default, but 
+    // excessively large for this application) to 32 KiB, which is the minimum
+    // amount of stack space that threads need to successfully perform their 
+    // work.
     pthread_attr_t pooled_attr_template;
     pthread_attr_t* attr_ptr = &pooled_attr_template;
     
     if (pthread_attr_init(attr_ptr)) {
         LOG(LOG_ERR, "Failed to initialize attributes for pooled threads!\n");
         LOG(LOG_WARNING, "This means that stack size cannot be reduced from the default, which may overwhelm system resources unexpectedly.\n");
-        attr_ptr = NULL;
+        attr_ptr = NULL; // Cause just the default attributes to be used in the pthread_create() call
     }
 
     if (pthread_attr_setstacksize(&pooled_attr_template, 2 * PTHREAD_STACK_MIN)) {
         LOG(LOG_ERR, "Failed to set stack size for pooled threads! (%s)\n", strerror(errno));
         LOG(LOG_WARNING, "This means that threads will proceed with the default stack size, which is unnecessarily large for this application and which may overwhelm system resources unexpectedly.\n");
-        attr_ptr = NULL;
+        attr_ptr = NULL; // Cause the default attributs to be used in pthread_create()
     }
 
     // Malloc used here since initialization not important (pthread_ts will be changed with pthread_create())
@@ -243,13 +257,20 @@ int main(int argc, char** argv) {
     }
 
     for (size_t i = 0; i < max_threads; i += 1) {
+        // Attribute is a safe bet: either reduced stack size or default since attr_ptr was set to NULL on prior errors
         int create_errorcode = pthread_create(&(worker_pool[i]), attr_ptr, &thread_launcher, queue);
+        
+        // In the new thread pool design, failure to create threads is an even more critical error.
+        // If a thread could not be created, the user probably hit something like a system-enforced
+        // threading limit, and should try again.
         if (create_errorcode) {
             LOG(LOG_ERR, "Failed to create thread! (%s)\n", strerror(create_errorcode));
+            LOG(LOG_ERR, "HINT: Try running mustang again with a lower max threads argument.\n");
             return 1;
         }
     }
 
+    // Parse each path argument, check them for validity, and pass along initial tasks
     for (int index = 7; index < argc; index += 1) {
         LOG(LOG_INFO, "Processing arg \"%s\"\n", argv[index]);
 
@@ -257,13 +278,16 @@ int main(int argc, char** argv) {
 
         int statcode = stat(argv[index], &arg_statbuf);
 
+        // If stat itself failed, nothing can be assumed about the path argument, so skip
         if (statcode) {
             LOG(LOG_ERR, "Failed to stat path arg \"%s\" (%s)--skipping to next\n", argv[index], strerror(errno));
             continue;
         }
 
+        // Safe check here---MarFS will forward S_IFDIR for the only valid task
+        // "targets" (directories and namespaces alike)
         if ((arg_statbuf.st_mode & S_IFMT) != S_IFDIR) {
-            LOG(LOG_WARNING, "Path arg \"%s\" does not target a directory--skipping to next\n", argv[index]);
+            LOG(LOG_WARNING, "Path arg \"%s\" does not target a directory or namespace--skipping to next\n", argv[index]);
             continue;
         }
 
@@ -271,8 +295,11 @@ int main(int argc, char** argv) {
 
         if (config_duplicateposition(&parent_position, new_task_position)) {
             LOG(LOG_ERR, "Failed to duplicate parent position to new task!\n");
+            free(new_task_position);
+            continue;
         }
 
+        // Create "mutable" path for config_traverse() to modify as needed
         char* next_basepath = strdup(argv[index]);
 
         int new_task_depth = config_traverse(parent_config, new_task_position, &next_basepath, 0);
@@ -281,17 +308,24 @@ int main(int argc, char** argv) {
             LOG(LOG_ERR, "Failed to traverse (got depth: %d)\n", new_task_depth);
             free(next_basepath);
             config_abandonposition(new_task_position);
+            free(new_task_position);
             continue;
         }
 
         if (config_fortifyposition(new_task_position)) {
             LOG(LOG_ERR, "Failed to fortify new_task position after new_task traverse!\n");
+            free(next_basepath);
+            config_abandonposition(new_task_position);
+            free(new_task_position);
+            continue;
         }
 
         MDAL_DHANDLE task_dirhandle;
 
         MDAL task_mdal = new_task_position->ns->prepo->metascheme.mdal;
 
+        // If new depth > 0 (guaranteed by previous logic), the target is a 
+        // directory, so "place" new task within directory.
         if (new_task_depth != 0) {
             task_dirhandle = task_mdal->opendir(new_task_position->ctxt, next_basepath);
 
@@ -299,22 +333,29 @@ int main(int argc, char** argv) {
                 LOG(LOG_ERR, "Failed to open target directory \"%s\" (%s)\n", next_basepath, strerror(errno));
             }
 
+            // NOTE: mdal->chdir() calls destroy their second argument---hence
+            // why callers of directory tasks (traverse_dir()) have to reopen
+            // the same directory to be able to call readdir().
             if (task_mdal->chdir(new_task_position->ctxt, task_dirhandle)) {
                 LOG(LOG_ERR, "Failed to chdir into target directory \"%s\" (%s)\n", next_basepath, strerror(errno));
             }
         }
 
+        // Tell the new task where it is (namespace or not) by recording its
+        // depth in its state.
         new_task_position->depth = new_task_depth; 
 
         mustang_task* top_task;
 
         switch (new_task_depth) {
             case 0:
+                // Namespace case. Enqueue a new namespace traversal task.
                 top_task = task_init(parent_config, new_task_position, output_table, &ht_lock, queue, &traverse_ns);
                 task_enqueue(queue, top_task);
                 LOG(LOG_DEBUG, "Created top-level namespace traversal task at basepath: \"%s\"\n", next_basepath);
                 break;
             default:
+                // "Regular" (directory) case. Enqueue a new directory traversal task.
                 top_task = task_init(parent_config, new_task_position, output_table, &ht_lock, queue, &traverse_dir);
                 task_enqueue(queue, top_task);
                 LOG(LOG_DEBUG, "Created top-level directory traversal task at basepath: \"%s\"\n", next_basepath);
@@ -325,9 +366,16 @@ int main(int argc, char** argv) {
     }
 
     pthread_mutex_lock(queue->lock);
+
+    // Put the parent to sleep until worker threads have:
+    // 1. Taken all tasks out of the queue (and, therefore, queue->size > 0)
+    // 2. Finished all tasks, including having them return in error (threads 
+    //    decrement queue->todos after they finish a task, not after they 
+    //    remove it from the queue)
     while ((queue->todos > 0) || (queue->size > 0)) {
         pthread_cond_wait(queue->manager_cv, queue->lock);
     }
+
     pthread_mutex_unlock(queue->lock); 
 
     // Once there are no tasks left in the queue to do, send workers sentinel (all-NULL) tasks so that they know to exit.
@@ -343,6 +391,16 @@ int main(int argc, char** argv) {
         }
     }
 
+    /**
+     * If destroying the task queue fails (which will set errno to EBUSY for a 
+     * valid queue), something has gone seriously wrong in the synchronization
+     * between the manager and worker threads.
+     *
+     * Logically, this should not be able to happen since all worker threads 
+     * (and, therefore, all other users of the task queue) have been joined; 
+     * however, there is logging code here "just in case" since the problem is 
+     * sufficiently severe.
+     */
     if (task_queue_destroy(queue)) {
         LOG(LOG_ERR, "Failed to destroy task queue! (%s)\n", strerror(errno));
         LOG(LOG_WARNING, "This is a critical application error meaning thread-safety measures have failed. You are strongly advised to disregard the output of this run and attempt another invocation.\n");

@@ -20,6 +20,7 @@ MARFS_LDFLAGS := -L$(MARFS_PREFIX)/lib
 # all the significant computational work via the thread routines
 all: mustang_engine
 
+# The executable recipe
 mustang_engine: mustang_engine.c libmustang.a
 	$(CC) $(CFLAGS) $(MARFS_CFLAGS) $(MARFS_INCLUDE) $< -o $@ $(LDFLAGS) \
 		-lpthread -L. -lmustang $(MARFS_LDFLAGS) \
@@ -40,6 +41,8 @@ mustang_threading.o: mustang_threading.c mustang_threading.h mustang_logging.h
 %.o: %.c %.h
 	$(CC) $(CFLAGS) $(MARFS_INCLUDE) $< -c $(LDLIBS)
 
+# Copy binaries and frontend script to MarFS install location to also make them
+# accessible in PATH
 install: mustang_engine
 	cp ./$< $(MARFS_PREFIX)/bin/
 	cp ./mustang $(MARFS_PREFIX)/bin/

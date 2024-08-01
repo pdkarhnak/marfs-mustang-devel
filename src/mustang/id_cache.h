@@ -40,7 +40,6 @@ id_cache* id_cache_init(size_t new_capacity);
 int id_cache_add(id_cache* cache, char* new_id);
 
 /** 
- *
  * Check an id_cache struct for a node which stores ID `searched_id`. If the ID
  * is stored, silently "bump" the node storing the searched ID to the head of 
  * the cache to indicate that the ID has been the most recently used in the

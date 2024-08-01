@@ -27,10 +27,11 @@ parser.add_argument("-o", "--output", required=False, type=str, default=default_
         help='Output file where names of catalogged objects (as maintained in the program\'s hashtable) will be written.')
 
 version_str = \
-        "MUSTANG (MarFS/Marchive Underlying Storage Tree and Namespace Gatherer) version 1.2.0, by Paul D. Karhnak. See MarFS copyright for more information."
-
+        "MUSTANG (MarFS/Marchive Underlying Storage Tree and Namespace Gatherer) version 1.2.1, by Paul D. Karhnak. See MarFS copyright for more information."
 
 parser.add_argument("--version", action='version', help='Print version and license information, then exit.', version=version_str)
+
+parser.add_argument("-v", "--verbose", action='store_true', required=False, default=False, help='Print additional information about the argument format passed to the executable.')
 
 logging_group = parser.add_mutually_exclusive_group()
 logging_group.add_argument("-l", "--logfile", "--log-file", required=False, type=str, nargs=1, default=default_logname, metavar="LOGFILE",
@@ -39,6 +40,7 @@ logging_group.add_argument("--use-stderr", required=False, action='store_true',
         help='Do not log in a separate file and print all messages to stderr. Exclusive with -l/--logfile/--log-file.')
 
 if __name__ == '__main__': 
+    # Check whether executable is built
     if not(os.access("./mustang_engine", os.F_OK)) and not(os.access("mustang_engine", os.F_OK)):
         print("Executable for MUSTANG engine does not exist! Please build it and try again.")
         exit(1)
@@ -101,11 +103,12 @@ if __name__ == '__main__':
         else:
             engine_args.append(path_arg)
 
-    print(f"Using invocation: {engine_args}", file=sys.stderr)
+    if (args.verbose):
+        print(f"Using invocation: {engine_args}", file=sys.stderr)
 
     try:
         subprocess.run(engine_args)
-        shutil.move(init_output_handle, final_handle) 
+        shutil.move(init_output_handle, final_handle) # Output file handle acts as "sentinel" for whether run successfully concluded or not
 
         with open(final_handle, 'r') as hashtable:
             line_count = len(hashtable.readlines())

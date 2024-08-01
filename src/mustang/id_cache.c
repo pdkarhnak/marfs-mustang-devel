@@ -9,6 +9,13 @@ void cachenode_destroy(id_cachenode* node);
 void pluck_node(id_cache* cache, id_cachenode* node);
 
 /**** Public interface implementation ****/
+
+/**
+ * Allocate space for, and return a pointer to, a new id_cache struct on the 
+ * heap according to a specified capacity.
+ *
+ * Returns: valid pointer to id_cache struct on success, or NULL on failure.
+ */
 id_cache* id_cache_init(size_t new_capacity) {
     id_cache* new_cache = (id_cache*) calloc(1, sizeof(id_cache));
 
@@ -24,6 +31,15 @@ id_cache* id_cache_init(size_t new_capacity) {
     return new_cache;
 }
 
+/** 
+ * Create a new cache node to store `new_id`, then place that node at the head
+ * of the cache to indicate that the `new_id` is the most-recently-used ID in
+ * the cache. If the cache is at capacity, silently evict the tail node in the
+ * cache to make room for the new node.
+ *
+ * Returns: 0 on success (node could be created and the list was successfully
+ * modified), or -1 on failure (node could not be allocated).
+ */
 int id_cache_add(id_cache* cache, char* new_id) {
     id_cachenode* new_node = cachenode_init(new_id);
 
@@ -51,6 +67,15 @@ int id_cache_add(id_cache* cache, char* new_id) {
     return 0;
 }
 
+/** 
+ * Check an id_cache struct for a node which stores ID `searched_id`. If the ID
+ * is stored, silently "bump" the node storing the searched ID to the head of 
+ * the cache to indicate that the ID has been the most recently used in the
+ * cache.
+ *
+ * Returns: 1 if a node was found which stored an id matching `stored_id`, or 0
+ * if no such node was present.
+ */
 int id_cache_probe(id_cache* cache, char* searched_id) {
     id_cachenode* searched_node = cache->head;
 
@@ -67,6 +92,9 @@ int id_cache_probe(id_cache* cache, char* searched_id) {
     return 0;
 }
 
+/**
+ * Destroy the given id_cache struct and free the memory associated with it.
+ */
 void id_cache_destroy(id_cache* cache) {
     if (cache == NULL) {
         return;

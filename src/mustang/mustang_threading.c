@@ -186,6 +186,8 @@ void traverse_dir(marfs_config* base_config, marfs_position* task_position, hash
     // Recover a directory handle for the cwd to enable later readdir()
     MDAL_DHANDLE cwd_handle = thread_mdal->opendir(task_position->ctxt, ".");
 
+    // Cannot proceed with "main" traversal logic if handle is NULL (i.e.,
+    // if an error occurred on opendir)
     if (cwd_handle == NULL) {
         LOG(LOG_ERR, "Failed to open current directory for reading! (%s)\n", strerror(errno));
         config_abandonposition(task_position);
@@ -193,14 +195,15 @@ void traverse_dir(marfs_config* base_config, marfs_position* task_position, hash
         return;
     }
 
-    /** BEGIN directory traversal and file/directory discovery routine **/
-
     // "Regular" readdir logic
     struct dirent* current_entry = thread_mdal->readdir(cwd_handle);
 
     char* file_ftagstr = NULL;
     char* retrieved_id = NULL;
 
+    // Unlike a standard collection, directories are not strictly "ordered".
+    // So, simply retrieve all entries until readdir() returns NULL to
+    // indicate "no more entries"
     while (current_entry != NULL) {
         // Ignore dirents corresponding to "invalid" paths (reference tree,
         // etc.)
@@ -246,6 +249,9 @@ void traverse_dir(marfs_config* base_config, marfs_position* task_position, hash
                 continue;
             }
             
+            // Open a directory handle for the "child" task that is being 
+            // created to enable chdir() for that task and starting "directly"
+            // at the new position
             MDAL_DHANDLE next_cwd_handle = thread_mdal->opendir(new_dir_position->ctxt, current_entry->d_name);
 
             if (next_cwd_handle == NULL) {
@@ -277,11 +283,13 @@ void traverse_dir(marfs_config* base_config, marfs_position* task_position, hash
             // depth == -1 case (config_traverse() error) has already been handled, so presuming that 0 and > 0 are exhaustive is safe.
             switch (new_depth) {
                 case 0:
+                    // Namespace case. Enqueue a new namespace traversal task.
                     new_task = task_init(base_config, new_dir_position, output_table, table_lock, pool_queue, &traverse_ns);
                     task_enqueue(pool_queue, new_task);
                     LOG(LOG_DEBUG, "Created new task to traverse namespace \"%s\"\n", new_basepath);
                     break;
                 default:
+                    // "Regular" (directory) case. Enqueue a new directory traversal task.
                     new_task = task_init(base_config, new_dir_position, output_table, table_lock, pool_queue, &traverse_dir);
                     task_enqueue(pool_queue, new_task);
                     LOG(LOG_DEBUG, "Created new task to traverse directory \"%s\"\n", new_basepath);
@@ -296,6 +304,7 @@ void traverse_dir(marfs_config* base_config, marfs_position* task_position, hash
             file_ftagstr = get_ftag(task_position, thread_mdal, current_entry->d_name);
             FTAG retrieved_tag = {0};
             
+            // Initialize FTAG struct from string representation
             if (ftag_initstr(&retrieved_tag, file_ftagstr)) {
                 LOG(LOG_ERR, "Failed to initialize FTAG for file: \"%s\"\n", current_entry->d_name);
                 free(file_ftagstr);
@@ -308,6 +317,11 @@ void traverse_dir(marfs_config* base_config, marfs_position* task_position, hash
             ne_erasure placeholder_erasure;
             ne_location placeholder_location;
 
+            // Sufficiently large files may be "chunked" (i.e., logically 
+            // separated) into multiple backend MarFS objects depending on file
+            // size and the MarFS config. Make sure that IDs for *all* chunks 
+            // of the file are retrieved and recorded, not just the ID for the
+            // first chunk.
             for (size_t i = objno_min; i <= objno_max; i += 1) {
                 retrieved_tag.objno = i;
                 if (datastream_objtarget(&retrieved_tag, &(task_position->ns->prepo->datascheme), &retrieved_id, &placeholder_erasure, &placeholder_location)) { 
@@ -388,6 +402,9 @@ void traverse_ns(marfs_config* base_config, marfs_position* task_position, hasht
     if (task_position->ns->subnodes) {
 
         for (size_t subnode_index = 0; subnode_index < task_position->ns->subnodecount; subnode_index += 1) {
+            // HASH_NODE stores nested namespace ("subspace") information.
+            // So, retrieve each subnode, read out namespace information, and
+            // set up new tasks as needed.
             HASH_NODE current_subnode = (task_position->ns->subnodes)[subnode_index];
 
             marfs_position* new_ns_position = (marfs_position*) calloc(1, sizeof(marfs_position));
@@ -399,6 +416,13 @@ void traverse_ns(marfs_config* base_config, marfs_position* task_position, hasht
             }
             
             char* new_ns_path = strdup(current_subnode.name);
+
+            // config_traverse usually returns a result < 0 on error. However, 
+            // if this particular call returns anything nonzero (including 
+            // otherwise valid depths > 0), this violates the assumption that 
+            // we are traversing to another namespace (which creates an 
+            // expectation of depth == 0). So, simplify the check to report an
+            // error if the result is nonzero.
             if (config_traverse(base_config, new_ns_position, &new_ns_path, 0)) {
                 LOG(LOG_ERR, "Failed to traverse to new new_task position: %s\n", current_subnode.name);
                 free(new_ns_path);

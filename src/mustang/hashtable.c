@@ -230,6 +230,12 @@ int hashnode_destroy(hashnode* node) {
     return 0;
 }
 
+/**
+ * Initialize a hashtable on the heap, including space for all `new_capacity`
+ * hashnodes. As part of the table initialization, this function invokes 
+ * necessary functionality to allocate state for each hashnode and prepare 
+ * separate chaining.
+ */
 hashtable* hashtable_init(size_t new_capacity) {
     hashtable* new_table = calloc(1, sizeof(hashtable));
 
@@ -248,6 +254,11 @@ hashtable* hashtable_init(size_t new_capacity) {
     return new_table;
 }
 
+/**
+ * Destroy a hashtable on the heap, freeing all memory associated with the
+ * table including the space for all `table->capacity` nodes and their 
+ * associated state of their linked lists maintained for separate chaining.
+ */
 void hashtable_destroy(hashtable* table) {
     for (size_t node_index = 0; node_index < table->capacity; node_index += 1) {
         hashnode_destroy((table->stored_nodes)[node_index]);
@@ -257,6 +268,18 @@ void hashtable_destroy(hashtable* table) {
     free(table); 
 }
 
+/** 
+ * The public function to insert an object name into a particular hash table.
+ *
+ * For a given name key, compute the hashcode and insert the name at the
+ * appropriate index within the hashtable.
+ *
+ * NOTE: in a case of application-specific behavior, this function always
+ * succeeds (and thus does not return anything). The function will either
+ * insert the object name into the table (including through internal separate 
+ * chaining functionality) if it is not present at the computed index or will 
+ * simply return without inserting upon encountering a duplicate.
+ */
 void put(hashtable* table, char* new_object_name) {
     // Compute the hash to see which index (and, therefore, which relevant
     // node) to insert at
@@ -297,6 +320,18 @@ int hashnode_dump(hashnode* node, FILE* output) {
     return 0;
 }
 
+/** 
+ * A helper function to print the contents of non-empty hashnodes, including 
+ * the contents of their linked lists maintained for separate chaining, in a
+ * hashtable to the file referenced by the pointer `output`.
+ *
+ * NOTE: this function assumes any synchronization measures (locking an
+ * associated mutex for hashtable `table`, etc.) have already been taken. In
+ * mustang, the engine (main routine) locks and unlocks the associated mutex
+ * around a call to this function to satisfy the synchronization assumptions.
+ * Do not otherwise call this function without appropriately synchronizing on
+ * the hashtable.
+ */
 int hashtable_dump(hashtable* table, FILE* output) {
     for (size_t index = 0; index < table->capacity; index += 1) {
         hashnode_dump((table->stored_nodes)[index], output);
@@ -389,24 +424,24 @@ void MurmurHash3_x64_128 ( const void * key, const int len,
 
   switch(len & 15)
   {
-  case 15: k2 ^= ((uint64_t)tail[14]) << 48;
-  case 14: k2 ^= ((uint64_t)tail[13]) << 40;
-  case 13: k2 ^= ((uint64_t)tail[12]) << 32;
-  case 12: k2 ^= ((uint64_t)tail[11]) << 24;
-  case 11: k2 ^= ((uint64_t)tail[10]) << 16;
-  case 10: k2 ^= ((uint64_t)tail[ 9]) << 8;
-  case  9: k2 ^= ((uint64_t)tail[ 8]) << 0;
-           k2 *= c2; k2  = ROTL64(k2,33); k2 *= c1; h2 ^= k2;
+  case 15: k2 ^= ((uint64_t)tail[14]) << 48; // fall through
+  case 14: k2 ^= ((uint64_t)tail[13]) << 40; // fall through
+  case 13: k2 ^= ((uint64_t)tail[12]) << 32; // fall through
+  case 12: k2 ^= ((uint64_t)tail[11]) << 24; // fall through
+  case 11: k2 ^= ((uint64_t)tail[10]) << 16; // fall through
+  case 10: k2 ^= ((uint64_t)tail[ 9]) << 8; // fall through
+  case  9: k2 ^= ((uint64_t)tail[ 8]) << 0; 
+           k2 *= c2; k2  = ROTL64(k2,33); k2 *= c1; h2 ^= k2; // fall through
 
-  case  8: k1 ^= ((uint64_t)tail[ 7]) << 56;
-  case  7: k1 ^= ((uint64_t)tail[ 6]) << 48;
-  case  6: k1 ^= ((uint64_t)tail[ 5]) << 40;
-  case  5: k1 ^= ((uint64_t)tail[ 4]) << 32;
-  case  4: k1 ^= ((uint64_t)tail[ 3]) << 24;
-  case  3: k1 ^= ((uint64_t)tail[ 2]) << 16;
-  case  2: k1 ^= ((uint64_t)tail[ 1]) << 8;
-  case  1: k1 ^= ((uint64_t)tail[ 0]) << 0;
-           k1 *= c1; k1  = ROTL64(k1,31); k1 *= c2; h1 ^= k1;
+  case  8: k1 ^= ((uint64_t)tail[ 7]) << 56; // fall through
+  case  7: k1 ^= ((uint64_t)tail[ 6]) << 48; // fall through
+  case  6: k1 ^= ((uint64_t)tail[ 5]) << 40; // fall through
+  case  5: k1 ^= ((uint64_t)tail[ 4]) << 32; // fall through
+  case  4: k1 ^= ((uint64_t)tail[ 3]) << 24; // fall through
+  case  3: k1 ^= ((uint64_t)tail[ 2]) << 16; // fall through
+  case  2: k1 ^= ((uint64_t)tail[ 1]) << 8; // fall through
+  case  1: k1 ^= ((uint64_t)tail[ 0]) << 0; 
+           k1 *= c1; k1  = ROTL64(k1,31); k1 *= c2; h1 ^= k1; // fall through
   };
 
   //----------

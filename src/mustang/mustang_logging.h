@@ -3,6 +3,8 @@
 
 #include <string.h>
 
+// By default, log everything (errors, warnings, and informational/debug-level
+// messages)
 #ifndef DEBUG_MUSTANG
 #define DEBUG_MUSTANG 1
 #endif
