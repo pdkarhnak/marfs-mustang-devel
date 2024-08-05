@@ -422,6 +422,10 @@ void MurmurHash3_x64_128 ( const void * key, const int len,
   uint64_t k1 = 0;
   uint64_t k2 = 0;
 
+  // switch statement written to implicitly allow fallthroughs.
+  // To silence gcc warnings with `-Wextra` about this, use 
+  // "// fall through" magic comments. Yes, there are better ways of
+  // silencing compiler warnings, but this is the funniest.
   switch(len & 15)
   {
   case 15: k2 ^= ((uint64_t)tail[14]) << 48; // fall through
