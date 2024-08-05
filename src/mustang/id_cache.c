@@ -23,7 +23,10 @@ id_cache* id_cache_init(size_t new_capacity) {
         return NULL;
     }
 
+    // Use the capacity argment in a "constructor" usage pattern
     new_cache->capacity = new_capacity;
+
+    // Use "defaults" for other state
     new_cache->size = 0;
     new_cache->head = NULL;
     new_cache->tail = NULL;
@@ -41,12 +44,17 @@ id_cache* id_cache_init(size_t new_capacity) {
  * modified), or -1 on failure (node could not be allocated).
  */
 int id_cache_add(id_cache* cache, char* new_id) {
+    // Internally create space for new node based on ID
     id_cachenode* new_node = cachenode_init(new_id);
 
+    // Indicates ENOMEM or similar critical error condition
     if (new_node == NULL) {
         return -1;
     }
 
+    // If cache is empty, no need to "link" new node to any existing nodes.
+    // If cache is not empty, perform "linking" to any existing nodes as 
+    // applicable in addition to placing the new node at the head position.
     if (cache->size == 0) {
         cache->head = new_node;
     } else {
@@ -56,12 +64,17 @@ int id_cache_add(id_cache* cache, char* new_id) {
     }
 
     cache->size += 1;
+
+    // New nodes are essentially "pushed" to the top of the cache in a 
+    // stack-like usage pattern, so update the tail node manually.
     update_tail(cache);
 
+    // If cache is at capacity, evict (pop and destroy) the tail node, which
+    // corresponds to the least-recently-used object ID.
     if (cache->size > cache->capacity) {
         cachenode_destroy(cache->tail);
         cache->size -= 1;
-        update_tail(cache);
+        update_tail(cache); // Tail was just evicted, so find new tail node
     }
 
     return 0;
@@ -79,10 +92,20 @@ int id_cache_add(id_cache* cache, char* new_id) {
 int id_cache_probe(id_cache* cache, char* searched_id) {
     id_cachenode* searched_node = cache->head;
 
+    // Perform a linear traversal of the cache to attempt to find a node with
+    // matching data
     while (searched_node != NULL) {
+        // If the queried ID hits against this cache...
         if (strncmp(searched_node->id, searched_id, strlen(searched_node->id)) == 0) {
+            // Move the node with matching data to the head position to 
+            // indicate it is the most recently used in the cache
             pluck_node(cache, searched_node);
+
+            // This may possibly move the tail node to the head node, so 
+            // ensure that the tail node is properly recorded for this 
+            // cache.
             update_tail(cache);
+
             return 1;
         }
 
@@ -102,12 +125,14 @@ void id_cache_destroy(id_cache* cache) {
 
     id_cachenode* to_destroy = cache->head;
 
+    // In a simple linear traversal, destroy each node.
     while (to_destroy != NULL) {
         id_cachenode* next_node = to_destroy->next;
         cachenode_destroy(to_destroy);
         to_destroy = next_node;
     }
 
+    // Invalidate cache-specific state: head node, tail node, size.
     cache->size = 0;
     cache->head = NULL;
     cache->tail = NULL;
@@ -115,6 +140,15 @@ void id_cache_destroy(id_cache* cache) {
 }
 
 /**** Private functions ****/
+
+/**
+ * An internal "private" function to initialize an individual cache "node"
+ * (i.e., an doubly-linked list node that is a constituent of the cache).
+ *
+ * NOTE: as a private function, users should **never** call this directly,
+ * instead relying on higher-level public wrappers (in this case, 
+ * id_cache_add()).
+ */
 id_cachenode* cachenode_init(char* new_id) {
     id_cachenode* new_node = calloc(1, sizeof(id_cachenode));
 
@@ -122,6 +156,8 @@ id_cachenode* cachenode_init(char* new_id) {
         return NULL;
     }
     
+    // Dup string memory to separate concerns of argument and memory storage.
+    // In effect, follow a "constructor" pattern.
     char* duped_id = strdup(new_id);
     if (duped_id == NULL) {
         free(new_node);
@@ -135,6 +171,16 @@ id_cachenode* cachenode_init(char* new_id) {
     return new_node;
 }
 
+/**
+ * An internal "private" function to search the cache for the "canonical" tail
+ * node (i.e., the node whose ->next field is a NULL pointer) and ensure that
+ * the cache properly records this node as the tail pointer in its ->tail 
+ * field.
+ *
+ * NOTE: as a private function, users should **never** call this directly,
+ * instead relying on higher-level public wrappers (in this case, 
+ * id_cache_add() and id_cache_probe()).
+ */
 void update_tail(id_cache* cache) {
     if (cache == NULL) {
         return;
@@ -151,42 +197,70 @@ void update_tail(id_cache* cache) {
     }
 }
 
+/** 
+ * An internal "private" function to free an individual node in the ID cache 
+ * and its associated state.
+ *
+ * NOTE: as a private function, users should **never** call this directly, 
+ * instead relying on higher-level public wrappers (in this case, 
+ * id_cache_add() and id_cache_destroy()).
+ */
 void cachenode_destroy(id_cachenode* node) {
     if (node == NULL) {
         return;
     }
 
+    // "Reach into" next node if valid and redirect prev pointer
     if (node->next != NULL) {
         node->next->prev = node->prev;
     }
 
+    // "Reach into" prev node if valid and redirect next pointer
     if (node->prev != NULL) {
         node->prev->next = node->next;
     }
 
+    // Completely unlink this node from others for safety
     node->prev = NULL;
     node->next = NULL;
     free(node->id);
     free(node);
 }
 
+/** 
+ * An internal "private" function to move a node from an arbitrary position in
+ * the ID cache to the head position, then update the cache's state accordingly
+ * to reflect that the node is now the head ndoe.
+ *
+ * NOTE: as a private function, users should **never** call this directly, 
+ * instead relying on higher-level public wrappers (in this case, 
+ * id_cache_probe()).
+ */
 void pluck_node(id_cache* cache, id_cachenode* node) {
     if (cache == NULL || node == NULL) {
         return;
     }
 
+    // If node is already at the head of the cache, no work needs to be done to
+    // rearrange node to head position in cache
     if (cache->head == node) {
         return;
     }
 
+    // If node has a valid previous node, "reach into" previous node and 
+    // redirect its next pointer
     if (node->prev != NULL) {
         node->prev->next = node->next;
     }
 
+    // If node has a valid next node, "reach into" next node and redirect its
+    // prev pointer
     if (node->next != NULL) {
         node->next->prev = node->prev;
     }
 
+    // Move node to head of cache: make prev NULL (no node precedes it), 
+    // link new node to current head, and record head as new node
     node->prev = NULL;
     node->next = cache->head;
     cache->head->prev = node;

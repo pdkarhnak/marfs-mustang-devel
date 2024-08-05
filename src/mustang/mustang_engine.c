@@ -331,6 +331,10 @@ int main(int argc, char** argv) {
 
             if (task_dirhandle == NULL) {
                 LOG(LOG_ERR, "Failed to open target directory \"%s\" (%s)\n", next_basepath, strerror(errno));
+                free(next_basepath);
+                config_abandonposition(new_task_position);
+                free(new_task_position);
+                continue;
             }
 
             // NOTE: mdal->chdir() calls destroy their second argument---hence
@@ -338,6 +342,10 @@ int main(int argc, char** argv) {
             // the same directory to be able to call readdir().
             if (task_mdal->chdir(new_task_position->ctxt, task_dirhandle)) {
                 LOG(LOG_ERR, "Failed to chdir into target directory \"%s\" (%s)\n", next_basepath, strerror(errno));
+                free(next_basepath);
+                config_abandonposition(new_task_position);
+                free(new_task_position);
+                continue;
             }
         }
 

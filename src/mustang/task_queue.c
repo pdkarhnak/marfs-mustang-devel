@@ -76,6 +76,7 @@ mustang_task* task_init(marfs_config* task_config, marfs_position* task_position
         return NULL;
     }
 
+    // Initialize new task state like in a constructor based on arguments
     new_task->config = task_config;
     new_task->position = task_position;
     new_task->ht = task_ht;
@@ -120,6 +121,9 @@ task_queue* task_queue_init(size_t new_capacity) {
     new_queue->head = NULL;
     new_queue->tail = NULL;
 
+    // Heap-allocate sync primitives (lock, condition variables) for easier 
+    // memory sharing since resources maintained at the process level instead
+    // of in an individual thread's stack
     pthread_mutex_t* new_queue_lock = (pthread_mutex_t*) calloc(1, sizeof(pthread_mutex_t));
 
     if (new_queue_lock == NULL) {
@@ -127,7 +131,7 @@ task_queue* task_queue_init(size_t new_capacity) {
         return NULL;
     }
 
-    // If pthread_mutex_init() fails...
+    // If pthread_mutex_init() fails, clean up and exit
     if (pthread_mutex_init(new_queue_lock, NULL)) {
         free(new_queue_lock);
         free(new_queue);
@@ -145,7 +149,7 @@ task_queue* task_queue_init(size_t new_capacity) {
         return NULL;
     }
 
-    // If pthread_cond_init() fails...
+    // If pthread_cond_init() fails, clean up and exit
     if (pthread_cond_init(new_tasks_cv, NULL)) {
         free(new_tasks_cv);
         pthread_mutex_destroy(new_queue_lock);
@@ -167,7 +171,7 @@ task_queue* task_queue_init(size_t new_capacity) {
         return NULL;
     }
 
-    // If pthread_cond_init() fails...
+    // If pthread_cond_init() fails, clean up and exit
     if (pthread_cond_init(new_space_cv, NULL)) {
         free(new_space_cv);
         pthread_cond_destroy(new_tasks_cv);
@@ -193,7 +197,7 @@ task_queue* task_queue_init(size_t new_capacity) {
         return NULL;
     }
 
-    // If pthread_cond_init() fails...
+    // If pthread_cond_init() fails, clean up and exit
     if (pthread_cond_init(new_manager_cv, NULL)) {
         free(new_manager_cv);
         pthread_cond_destroy(new_space_cv);
@@ -255,6 +259,8 @@ int task_enqueue(task_queue* queue, mustang_task* new_task) {
         queue->head = new_task;
     }
 
+    // Wake up other threads to dequeue the new task if they are waiting for a
+    // new task to become available.
     pthread_cond_broadcast(queue->task_available);
     pthread_mutex_unlock(queue->lock);
 
@@ -284,24 +290,33 @@ mustang_task* task_dequeue(task_queue* queue) {
 
     pthread_mutex_lock(queue->lock);
 
+    // Wait until there is at least one task in the queue
     while (queue->size == 0) {
         pthread_cond_wait(queue->task_available, queue->lock);
     }
 
+    // Dequeue from the head to match standard FIFO queue interface behavior 
+    // and to provide a constant-time retrieval operation.
     retrieved_task = queue->head;
     queue->head = queue->head->next;
     queue->size -= 1;
 
+    // If applicable, unlink new head node from the recently dequeued node.
     if (queue->head != NULL) {
         queue->head->prev = NULL;
     }
 
+    // Invalidate tail pointer if no nodes exist in the queue. This works 
+    // because, for any nonzero queue size, there will always be a valid head
+    // node and tail node (the only special case being size == 1, in which case
+    // head and tail point to the same node)
     if (queue->size == 0) {
         queue->tail = NULL;
     }
 
     retrieved_task->next = NULL;
 
+    // Wake up other threads to enqueue tasks if they are waiting on space.
     pthread_cond_broadcast(queue->space_available);
     pthread_mutex_unlock(queue->lock);
 
@@ -312,6 +327,8 @@ mustang_task* task_dequeue(task_queue* queue) {
  * Destroy the given task_queue struct and free the memory associated with it.
  */
 int task_queue_destroy(task_queue* queue) {
+    // Perform a final atomic check to see if other threads are currently 
+    // using the queue
     pthread_mutex_lock(queue->lock);
     if (queue->size > 0) {
         pthread_mutex_unlock(queue->lock);
@@ -320,6 +337,8 @@ int task_queue_destroy(task_queue* queue) {
     }
     pthread_mutex_unlock(queue->lock);
 
+    // Destroy the sync primitives and free their heap memory (two steps are 
+    // required since pthread_*_init() does not itself allocate heap memory).
     pthread_mutex_destroy(queue->lock);
     free(queue->lock);
 
