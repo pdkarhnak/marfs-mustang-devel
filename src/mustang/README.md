@@ -1,4 +1,4 @@
-# MUSTANG version 1.2.0
+# MUSTANG version 1.2.1
 
 Welcome to **MUSTANG**!
 * **M**arFS (_or **M**archive/**M**etadata_)
@@ -22,11 +22,13 @@ dependencies. Installation instructions and documentation can be found
 
 ## Version history
 
-Users are strongly encouraged to use the current version (1.2.0), which is 
+Users are strongly encouraged to use the current version (1.2.x), which is 
 implemented using a thread pool and which is far more resilient to large 
 workloads than previous versions are.
 
 Previous versions are:
+* 1.2.0: functionally the same as version 1.2.1, which is the most recent,
+except for different default argument values and less complete documentation.
 * 1.1.0: the stable version using detached threads and a monitor to enforce 
 a rough limit on the number of "active" threads at one time.
 * 1.0.0: the initial stable version using a recursive threading routine with 
@@ -117,6 +119,21 @@ By default, output and logging files will be named based on timestamps recorded
 at the beginning of the program run. This is the recommended usage so that logs 
 and output files (i.e., files detailing hashtable contents) from multiple runs 
 may be kept without being overwritten.
+
+# Bugs
+
+As of the current version (1.2.1), there appear to be some issues with the
+cache interface logging some "false positive" cache hits. The current version
+will, as an optimization, check for a cache miss on a given object ID before
+deciding to put the ID in the output hashtable (and cache for future reference)
+or skip the object ID (trusting that the output hashtable already contains that
+ID). "False positive" cache hits, therefore, mean that an output hashtable will
+contain _fewer_ entries than there are actual unique objects in the target(s).
+This is a "small" bug (affecting about 0.064% of cases in an average run for a
+non-trivial target) but is nonetheless problematic. For MUSTANG 1.2.1, the
+average cache capacity argument has thus been reduced from 16 to 2, which
+testing suggests produces high performance while avoiding issues with object ID
+undercounts as are present in larger cache capacity values.
 
 # Acknowledgments
 

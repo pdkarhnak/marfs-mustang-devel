@@ -15,14 +15,14 @@ parser = argparse.ArgumentParser(prog='mustang', description='Parse command-line
 
 parser.add_argument("-p", "--paths", required=True, nargs='+', metavar='PATH', 
         help='One or more POSIX-like paths to recursively traverse within a MarFS instance and catalog objects along.')
-parser.add_argument("-t", "--threads", "--threads-max", required=False, type=int, default=256, metavar = "THREADS",
+parser.add_argument("-t", "--threads", "--threads-max", required=False, type=int, default=16, metavar = "THREADS",
         help='Number of threads that will be created to form the program\'s thread pool and which will serve be the hard limit for the maximum number of concurrent threads (plus a manager).')
 parser.add_argument("-tc", "--task-capacity", "--tasks-capacity", "--tasks-max", "--task-queue-capacity", required=False, type=int, default=-1, metavar='TASKS',
         help='Maximum number of tasks that may reside in the thread pool task queue at one time.')
 parser.add_argument("-hc", "--hc", "--hashtable-capacity", required=False, type=int, default=20, metavar="PWR", 
         help='Power of 2 determining output capacity (e.g., default 20 -> 2^20 -> capacity = 1048576).')
-parser.add_argument("-cc", "--cc", "--cache-capacity", "--id-cache-capacity", required=False, type=int, default=16, metavar="CAPACITY", 
-        help='Maximum number of unique MarFS object IDs that will be \"cached\" at one time in per-thread data structures (default: 16).') 
+parser.add_argument("-cc", "--cc", "--cache-capacity", "--id-cache-capacity", required=False, type=int, default=2, metavar="CAPACITY", 
+        help='Maximum number of unique MarFS object IDs that will be \"cached\" at one time in per-thread data structures (default: 2).') 
 parser.add_argument("-o", "--output", required=False, type=str, default=default_filename, metavar="FILE", 
         help='Output file where names of catalogged objects (as maintained in the program\'s hashtable) will be written.')
 
