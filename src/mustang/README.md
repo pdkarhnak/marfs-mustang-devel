@@ -1,4 +1,4 @@
-# MUSTANG version 1.2.1
+# MUSTANG version 1.2.2
 
 Welcome to **MUSTANG**!
 * **M**arFS (_or **M**archive/**M**etadata_)
@@ -22,17 +22,21 @@ dependencies. Installation instructions and documentation can be found
 
 ## Version history
 
-Users are strongly encouraged to use the current version (1.2.x), which is 
-implemented using a thread pool and which is far more resilient to large 
-workloads than previous versions are.
+Users are strongly encouraged to use the current version (1.2.2), which is
+implemented using a thread pool and which is far more resilient to large
+workloads than previous versions are. Version 1.2.2 also patches "false
+positive" behavior in hashtable and cache searches which caused an incorrectly
+low number of MarFS objects to be reported in the output file.
 
 Previous versions are:
-* 1.2.0: functionally the same as version 1.2.1, which is the most recent,
-except for different default argument values and less complete documentation.
-* 1.1.0: the stable version using detached threads and a monitor to enforce 
-a rough limit on the number of "active" threads at one time.
-* 1.0.0: the initial stable version using a recursive threading routine with 
-no limits on thread creation as a trade-off to prevent deadlock.
+* 1.2.1: similar to version 1.2.2 but containing aforementioned bugs related to
+  `strncmp()` usage in hashtable and ID cache search functionality.
+* 1.2.0: functionally the same as version 1.2.1 except for different default
+  argument values and less complete documentation.
+* 1.1.0: the stable version using detached threads and a monitor to enforce a
+  rough limit on the number of "active" threads at one time.
+* 1.0.0: the initial stable version using a recursive threading routine with no
+  limits on thread creation as a trade-off to prevent deadlock.
 
 # Modifying mustang
 
@@ -88,11 +92,11 @@ complete listing of arguments and usage information, see `mustang -h`.
 
 `-t` and its aliases (threads) represent the number of worker threads that will
 be pooled to accept and execute traversal tasks throughout the target
-filesystem. Any positive, nonzero integer less than or equal to $2^{63}$ will be 
-_accepted_; however, the application will warn about excessively large argument
-values. Be aware of system limits on the number of concurrent threads which 
-may be created per process (e.g., those in `/proc/sys/kernel/threads-max` or 
-`/proc/sys/vm/max_map_count`) and pass argument values responsibly.
+filesystem. Any positive, nonzero integer less than or equal to $2^{63}$ will
+be _accepted_; however, the application will warn about excessively large
+argument values. Be aware of system limits on the number of concurrent threads
+which may be created per process (e.g., those in `/proc/sys/kernel/threads-max`
+or `/proc/sys/vm/max_map_count`) and pass argument values responsibly.
 
 `-hc` and its aliases (hashtable capacity) represent the _power of two_ that
 the frontend computes to get the hashtable capacity. Hashtable capacity should
@@ -116,30 +120,45 @@ application may enter a state of livelock or deadlock as threads circularly
 wait to enqueue tasks based on other threads' ability to dequeue tasks.
 
 By default, output and logging files will be named based on timestamps recorded
-at the beginning of the program run. This is the recommended usage so that logs 
-and output files (i.e., files detailing hashtable contents) from multiple runs 
+at the beginning of the program run. This is the recommended usage so that logs
+and output files (i.e., files detailing hashtable contents) from multiple runs
 may be kept without being overwritten.
 
 # Bugs
 
-As of the current version (1.2.1), there appear to be some issues with the
-cache interface logging some "false positive" cache hits. The current version
-will, as an optimization, check for a cache miss on a given object ID before
-deciding to put the ID in the output hashtable (and cache for future reference)
-or skip the object ID (trusting that the output hashtable already contains that
-ID). "False positive" cache hits, therefore, mean that an output hashtable will
-contain _fewer_ entries than there are actual unique objects in the target(s).
-This is a "small" bug (affecting about 0.064% of cases in an average run for a
-non-trivial target) but is nonetheless problematic. For MUSTANG 1.2.1, the
-average cache capacity argument has thus been reduced from 16 to 2, which
-testing suggests produces high performance while avoiding issues with object ID
-undercounts as are present in larger cache capacity values.
+## Versions < 1.2.2
+
+All versions which use `strncmp()` in the hashtable `verify_original()` and ID
+cache `id_cache_probe()` prior to patches in version 1.2.2 are liable to "false
+positives" when checking whether object IDs already exist in the hashtable and
+ID cache. Version 1.2.2 fixes this by adding 1 to the third argument in
+`strncmp()` to ensure that the null byte is also included in the comparison.
+
+## Version 1.1.0
+
+This version enforced a _very soft_ limit on how many threads "could run at one
+time." Version 1.1.0 limit the number of threads which could be "active"
+(performing "useful" traversal work) simultaneously, but did _not_ limit the
+number of threads which could concurrently exist to begin with. For large
+workloads, especially those with directories or namespaces with many immediate
+child directories or namespaces, enough threads could be created that system
+threading limits were violated. Version 1.2.x was written to fix these
+problems; thus, Version 1.1.0 is deprecated and no longer actively maintained.
+
+## Version 1.0.0
+
+This version used a purer "recursive" strategy in that one thread was created
+for every new directory and namespace. For large workloads (targets containing
+many directories and namespaces), MUSTANG 1.0.0 quickly created a number of
+threads that tripped system threading limits. Versions 1.1.0 and 1.2.x were
+written to address this problem (1.2.x more effectively does); Version 1.0.0 is
+thus deprecated and no longer actively maintained.
 
 # Acknowledgments
 
-This work would not be possible without Garrett Ransom and Dave Bonnie, who 
-served as mentors during initial development from May 2024--August 2024 at 
-Los Alamos National Laboratory.
+This work would not be possible without Garrett Ransom and Dave Bonnie, who
+served as mentors during initial development from May 2024--August 2024 at Los
+Alamos National Laboratory.
 
 # Universal Release
 

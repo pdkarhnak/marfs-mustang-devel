@@ -27,7 +27,7 @@ parser.add_argument("-o", "--output", required=False, type=str, default=default_
         help='Output file where names of catalogged objects (as maintained in the program\'s hashtable) will be written.')
 
 version_str = \
-        "MUSTANG (MarFS/Marchive Underlying Storage Tree and Namespace Gatherer) version 1.2.1, by Paul D. Karhnak. See MarFS copyright for more information."
+        "MUSTANG (MarFS/Marchive Underlying Storage Tree and Namespace Gatherer) version 1.2.2, by Paul D. Karhnak. See MarFS copyright for more information."
 
 parser.add_argument("--version", action='version', help='Print version and license information, then exit.', version=version_str)
 
