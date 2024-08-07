@@ -96,7 +96,7 @@ int id_cache_probe(id_cache* cache, char* searched_id) {
     // matching data
     while (searched_node != NULL) {
         // If the queried ID hits against this cache...
-        if (strncmp(searched_node->id, searched_id, strlen(searched_node->id)) == 0) {
+        if (strncmp(searched_node->id, searched_id, strlen(searched_node->id) + 1) == 0) {
             // Move the node with matching data to the head position to 
             // indicate it is the most recently used in the cache
             pluck_node(cache, searched_node);

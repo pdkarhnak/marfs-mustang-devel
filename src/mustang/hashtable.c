@@ -159,7 +159,7 @@ int verify_original(hashnode* node, char* new_data) {
     hashnode_link* current_link = node->hn_links;
 
     for (size_t i = 0; i < node->linked; i += 1) {
-        if (strncmp(current_link->data, new_data, strlen(current_link->data)) == 0) {
+        if (strncmp(current_link->data, new_data, strlen(current_link->data) + 1) == 0) {
             return 0;
         }
 

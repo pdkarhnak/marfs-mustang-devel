@@ -84,8 +84,8 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
 #include "mustang_threading.h"
 #include "task_queue.h"
 
-// Maximum hashtable capacity: 2^63
-#define HC_MAX ((size_t) 1 << 63)
+// Maximum hashtable capacity: 2^24
+#define HC_MAX ((size_t) 1 << 24)
 
 extern void* thread_launcher(void* args);
 
@@ -164,6 +164,10 @@ int main(int argc, char** argv) {
         LOG(LOG_ERR, "Bad hashtable capacity argument \"%s\" received. Please specify a positive integer between (2**1) and (2**63), then try again.\n", argv[3]);
         fclose(output_ptr);
         return 1;
+    }
+
+    if (hashtable_capacity < 256) {
+        LOG(LOG_WARNING, "Received very small hashtable capacity argument \"%s\". Separate chaining will handle this, but may slow the program run unnecessarily.\n", argv[3]);
     }
 
     // Parse argument for per-thread object ID cache capacity
