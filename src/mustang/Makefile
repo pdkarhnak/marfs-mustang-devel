@@ -44,9 +44,9 @@ mustang_threading.o: mustang_threading.c mustang_threading.h mustang_logging.h
 # Copy binaries and frontend script to MarFS install location to also make them
 # accessible in PATH
 install: mustang_engine
-	cp ./$< $(MARFS_PREFIX)/bin/
-	cp ./mustang $(MARFS_PREFIX)/bin/
-	cp ./libmustang.a $(MARFS_PREFIX)/lib/
+	install ./$< $(MARFS_PREFIX)/bin/
+	install ./mustang $(MARFS_PREFIX)/bin/
+	install ./libmustang.a $(MARFS_PREFIX)/lib/
 
 clean:
 	rm -f libmustang.a ./*.o mustang_engine ./*.tar.gz
