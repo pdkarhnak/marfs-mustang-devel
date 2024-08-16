@@ -46,8 +46,8 @@ and header files on one another. However, some specific constants are likely
 necessary to modify to accommodate testing constraints.
 
 The `DEBUG_MUSTANG` flag in `mustang_logging.h` sets the verbosity of debug
-output in various `mustang` utilities (specifically, `mustang_engine.c`,
-`thread_main.c`, and `mustang_monitors.c`):
+output in various `mustang` utilities (specifically `mustang_engine.c` and
+`mustang_threading.c`):
 * `#define DEBUG_MUSTANG 1` prints debug output of all priorities
 * `#define DEBUG_MUSTANG 2` prints just priority `LOG_ERR` and `LOG_WARNING`
   debug messages
@@ -63,7 +63,7 @@ The current build system for `mustang` is a local `Makefile`; however, the
 build process may be integrated with the general MarFS build system in a future
 release.
 
-Assuming that building with the `Makefile`, is necessary, users must edit the
+Assuming that building with the `Makefile` is necessary users must edit the
 `MARFS_PREFIX` variable within the provided `Makefile` to match the path which
 was passed to the `--prefix=` argument when running `./configure` to build
 MarFS. Other macros within the Makefile are defined relative to `MARFS_PREFIX`
@@ -92,11 +92,13 @@ complete listing of arguments and usage information, see `mustang -h`.
 
 `-t` and its aliases (threads) represent the number of worker threads that will
 be pooled to accept and execute traversal tasks throughout the target
-filesystem. Any positive, nonzero integer less than or equal to $2^{63}$ will
-be _accepted_; however, the application will warn about excessively large
-argument values. Be aware of system limits on the number of concurrent threads
-which may be created per process (e.g., those in `/proc/sys/kernel/threads-max`
-or `/proc/sys/vm/max_map_count`) and pass argument values responsibly.
+filesystem. The total number of threads created and run concurrently will be
+the argument passed to `-t` (or the default) plus one manager thread. Any
+positive, nonzero integer less than or equal to $2^{63}$ will be _accepted_;
+however, the application will warn about excessively large argument values. Be
+aware of system limits on the number of concurrent threads which may be created
+per process (e.g., those in `/proc/sys/kernel/threads-max` or
+`/proc/sys/vm/max_map_count`) and pass argument values responsibly.
 
 `-hc` and its aliases (hashtable capacity) represent the _power of two_ that
 the frontend computes to get the hashtable capacity. Hashtable capacity should
@@ -113,11 +115,13 @@ the thread pool's task queue that will be allowed before `pthread_cond_wait()`
 calls when enqueueing tasks will "take effect" (i.e., force callers to sleep
 and wait on the corresponding condition variable tied to available space). By
 default, the task queue is effectively unbounded since the capacity is set to
-Linux `SIZE_MAX` (i.e., $2^{64} - 1$). Since the queue dynamically expands as
-tasks are enqueued, most applications need not worry about using an unbounded
-task queue. In fact, if an insufficiently large task queue is specified, the
-application may enter a state of livelock or deadlock as threads circularly
-wait to enqueue tasks based on other threads' ability to dequeue tasks.
+Linux `SIZE_MAX` (i.e., $2^{64} - 1$). The queue is not statically allocated,
+so running with an unbounded task queue is not inherently dangerous.
+Preliminary testing suggests that resident memory usage peaks at around 220 MiB
+even for large workloads (tens of millions of total directory entries). If an
+insufficiently large task queue is specified, the application may enter a state
+of livelock or deadlock as threads circularly wait to enqueue tasks based on
+other threads' ability to dequeue tasks. 
 
 By default, output and logging files will be named based on timestamps recorded
 at the beginning of the program run. This is the recommended usage so that logs
