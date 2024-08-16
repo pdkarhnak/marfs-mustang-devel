@@ -63,7 +63,7 @@ The current build system for `mustang` is a local `Makefile`; however, the
 build process may be integrated with the general MarFS build system in a future
 release.
 
-Assuming that building with the `Makefile` is necessary users must edit the
+Assuming that building with the `Makefile` is necessary, users must edit the
 `MARFS_PREFIX` variable within the provided `Makefile` to match the path which
 was passed to the `--prefix=` argument when running `./configure` to build
 MarFS. Other macros within the Makefile are defined relative to `MARFS_PREFIX`

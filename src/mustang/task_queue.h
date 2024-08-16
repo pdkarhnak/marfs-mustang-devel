@@ -74,7 +74,7 @@ typedef struct mustang_task_struct {
     hashtable* ht;
     pthread_mutex_t* ht_lock;
     task_queue* queue_ptr; // Tasks are retrieved from the queue, but during task execution other tasks may need to be enqueued.
-    // The routine to execute. For the current version of Mustang (1.2.0), either `traverse_ns()` for a namespace or `traverse_dir()` for a regular directory.
+    // The routine to execute. For the current version of Mustang (1.2.x), either `traverse_ns()` for a namespace or `traverse_dir()` for a regular directory.
     // If NULL, workers will detect this, clean up their state, and exit.
     void (*task_func)(marfs_config*, marfs_position*, hashtable*, pthread_mutex_t*, task_queue*);
     mustang_task* prev; // Queue implemented as doubly-linked list of tasks

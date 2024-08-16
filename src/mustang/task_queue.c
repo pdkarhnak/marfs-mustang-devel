@@ -69,7 +69,8 @@ GNU licenses can be found at http://www.gnu.org/licenses/.
  * Returns: valid pointer to mustang_task struct on success, or NULL on 
  * failure.
  */
-mustang_task* task_init(marfs_config* task_config, marfs_position* task_position, hashtable* task_ht, pthread_mutex_t* task_ht_lock, task_queue* queue_ref, void (*traversal_routine)(marfs_config*, marfs_position*, hashtable*, pthread_mutex_t*, task_queue*)) {
+mustang_task* task_init(marfs_config* task_config, marfs_position* task_position, hashtable* task_ht, pthread_mutex_t* task_ht_lock, task_queue* queue_ref, 
+        void (*traversal_routine)(marfs_config*, marfs_position*, hashtable*, pthread_mutex_t*, task_queue*)) {
     mustang_task* new_task = (mustang_task*) calloc(1, sizeof(mustang_task));
 
     if (new_task == NULL) {
